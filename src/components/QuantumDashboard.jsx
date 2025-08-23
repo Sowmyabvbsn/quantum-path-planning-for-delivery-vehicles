@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { optimizeRoute } from '../services/api';
+import InteractiveMap from './InteractiveMap';
 
 function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loading, setLoading }) {
   const [optimizationParams, setOptimizationParams] = useState({
@@ -12,6 +13,8 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const [previewRoute, setPreviewRoute] = useState(null);
   const [message, setMessage] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
 
   // Filter selected stops and ensure we have valid data
   const selectedStopData = useMemo(() => {
@@ -32,6 +35,24 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
     return filtered;
   }, [selectedStops, stops]);
 
+  // Get user's current location
+  React.useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+        },
+        (error) => {
+          console.warn('Could not get current location:', error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+  }, []);
   const handleOptimize = async () => {
     if (selectedStopData.length < 2) {
       setMessage('Please select at least 2 stops for optimization');
@@ -60,9 +81,25 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         setCurrentStep(step);
       }
 
+      // Determine starting point
+      let startIndex = optimizationParams.start_index;
+      if (useCurrentLocation && userLocation) {
+        // Find the closest stop to current location as starting point
+        let closestDistance = Infinity;
+        selectedStopData.forEach((stop, index) => {
+          const distance = calculateDistance(
+            userLocation.latitude, userLocation.longitude,
+            parseFloat(stop.latitude), parseFloat(stop.longitude)
+          );
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            startIndex = index;
+          }
+        });
+      }
       const result = await optimizeRoute({
         stop_ids: selectedStops,
-        start_index: optimizationParams.start_index,
+        start_index: startIndex,
         quantum_backend: optimizationParams.quantum_backend,
         optimization_level: optimizationParams.optimization_level
       });
@@ -72,7 +109,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       }
 
       setProgress(100);
-      setCurrentStep('Optimization complete!');
+      setCurrentStep('Hybrid quantum-classical optimization complete!');
       
       setTimeout(() => {
         onOptimizationComplete(result);
@@ -106,6 +143,28 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
     }));
   };
 
+  const handleLocationToggle = () => {
+    setUseCurrentLocation(!useCurrentLocation);
+    if (!useCurrentLocation && !userLocation) {
+      // Request location permission
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setUserLocation({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy
+            });
+          },
+          (error) => {
+            console.warn('Location access denied:', error);
+            setMessage('Location access denied. Please enable location services.');
+            setUseCurrentLocation(false);
+          }
+        );
+      }
+    }
+  };
   // Debug info - let's see what we're getting
   console.log('QuantumDashboard render - selectedStops:', selectedStops);
   console.log('QuantumDashboard render - stops:', stops);
@@ -116,10 +175,33 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       <div className="card">
         <div className="card-header">
           <h2>🚀 Quantum Route Optimization</h2>
-          <p>Optimize delivery routes using QAOA quantum algorithm</p>
+          <p>Advanced route optimization using quantum QAOA + classical algorithms</p>
         </div>
 
         <div className="optimization-setup">
+          {/* Current Location Section */}
+          {userLocation && (
+            <div className="current-location-info">
+              <h3>📍 Current Location</h3>
+              <div className="location-card">
+                <div className="location-details">
+                  <p><strong>Coordinates:</strong> {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}</p>
+                  <p><strong>Accuracy:</strong> ±{userLocation.accuracy ? Math.round(userLocation.accuracy) : 'Unknown'} meters</p>
+                </div>
+                <div className="location-toggle">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={useCurrentLocation}
+                      onChange={handleLocationToggle}
+                    />
+                    Use as starting point
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="selected-stops-info">
             <h3>Selected Stops ({selectedStopData.length})</h3>
             
@@ -133,6 +215,14 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                       <span className="coordinates">
                         {parseFloat(stop.latitude).toFixed(4)}, {parseFloat(stop.longitude).toFixed(4)}
                       </span>
+                      {userLocation && (
+                        <span className="distance-from-user">
+                          📍 {calculateDistance(
+                            userLocation.latitude, userLocation.longitude,
+                            parseFloat(stop.latitude), parseFloat(stop.longitude)
+                          ).toFixed(2)} km from you
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -165,43 +255,18 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
               
               {showPreview && (
                 <div className="preview-map-container">
-                  <div style={{
-                    height: '300px',
-                    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px dashed #cbd5e0',
-                    color: '#64748b'
-                  }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
-                      <h4>Interactive Map Preview</h4>
-                      <p>Selected stops: {selectedStopData.length}</p>
-                      <div style={{ marginTop: '1rem' }}>
-                        {selectedStopData.map((stop, index) => (
-                          <div key={stop.id} style={{ 
-                            display: 'inline-block', 
-                            margin: '0.25rem',
-                            padding: '0.25rem 0.5rem',
-                            background: '#667eea',
-                            color: 'white',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem'
-                          }}>
-                            {index + 1}. {stop.name}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <InteractiveMap
+                    stops={selectedStopData}
+                    currentLocation={userLocation}
+                    height="400px"
+                    showAnimation={false}
+                  />
                 </div>
               )}
               
               <div className="preview-info">
                 <p className="preview-note">
-                  💡 The interactive map will be available after optimization. The actual optimized route will be calculated using quantum algorithms.
+                  💡 Preview shows selected stops and current location. The optimized route will be calculated using hybrid quantum-classical algorithms.
                 </p>
               </div>
             </div>
@@ -211,20 +276,22 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             <div className="optimization-params">
               <h3>Optimization Parameters</h3>
               
-              <div className="param-group">
-                <label>Starting Stop</label>
-                <select
-                  value={optimizationParams.start_index}
-                  onChange={(e) => handleParamChange('start_index', parseInt(e.target.value))}
-                  disabled={loading}
-                >
-                  {selectedStopData.map((stop, index) => (
-                    <option key={stop.id} value={index}>
-                      {index + 1}. {stop.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {!useCurrentLocation && (
+                <div className="param-group">
+                  <label>Starting Stop</label>
+                  <select
+                    value={optimizationParams.start_index}
+                    onChange={(e) => handleParamChange('start_index', parseInt(e.target.value))}
+                    disabled={loading}
+                  >
+                    {selectedStopData.map((stop, index) => (
+                      <option key={stop.id} value={index}>
+                        {index + 1}. {stop.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="param-group">
                 <label>Quantum Backend</label>
@@ -246,9 +313,9 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   onChange={(e) => handleParamChange('optimization_level', parseInt(e.target.value))}
                   disabled={loading}
                 >
-                  <option value={1}>Level 1 - Fast</option>
-                  <option value={2}>Level 2 - Balanced</option>
-                  <option value={3}>Level 3 - Thorough</option>
+                  <option value={1}>Level 1 - Fast (Classical only)</option>
+                  <option value={2}>Level 2 - Balanced (Hybrid)</option>
+                  <option value={3}>Level 3 - Thorough (Full Hybrid)</option>
                 </select>
               </div>
             </div>
@@ -258,7 +325,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         {loading && (
           <div className="optimization-progress">
             <div className="progress-header">
-              <h3>🔬 Quantum Computing in Progress</h3>
+              <h3>🔬 Hybrid Quantum-Classical Computing</h3>
               <span className="progress-percent">{progress}%</span>
             </div>
             <div className="progress-bar">
@@ -291,12 +358,12 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             {loading ? (
               <>
                 <span className="spinner"></span>
-                Quantum Computing...
+                Hybrid Computing...
               </>
             ) : (
               <>
                 <span>⚛️</span>
-                Start Quantum Optimization
+                Start Hybrid Optimization
               </>
             )}
           </button>
@@ -305,17 +372,21 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
       <div className="algorithm-info">
         <div className="info-card">
-          <h3>🧮 QAOA Algorithm</h3>
+          <h3>🧮 Hybrid Quantum-Classical Optimization</h3>
           <p>
-            The Quantum Approximate Optimization Algorithm (QAOA) uses quantum superposition 
-            and entanglement to explore multiple route possibilities simultaneously, potentially 
-            finding better solutions than classical methods.
+            Our hybrid approach combines quantum QAOA with classical algorithms including 
+            simulated annealing, genetic algorithms, and ant colony optimization for 
+            superior route optimization accuracy.
           </p>
           <ul>
             <li>✨ Quantum superposition for parallel exploration</li>
             <li>🔗 Entanglement for correlated decision making</li>
+            <li>🧬 Genetic algorithms for population-based search</li>
+            <li>🐜 Ant colony optimization for pheromone-based routing</li>
+            <li>🔥 Simulated annealing for local optimization</li>
             <li>📏 Haversine formula for accurate distance calculations</li>
-            <li>🎯 One-way route optimization</li>
+            <li>📍 Current location integration</li>
+            <li>🚧 Real-time obstacle avoidance</li>
           </ul>
         </div>
       </div>
@@ -323,4 +394,16 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   );
 }
 
+// Helper function to calculate distance between two points
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
 export default QuantumDashboard;
