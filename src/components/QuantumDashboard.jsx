@@ -10,10 +10,19 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
 
-  const selectedStopData = stops.filter(stop => selectedStops.includes(stop.id));
+  // Filter selected stops and ensure we have valid data
+  const selectedStopData = stops.filter(stop => 
+    selectedStops.includes(stop.id) && stop.id && stop.name && 
+    stop.latitude !== undefined && stop.longitude !== undefined
+  );
+
+  // Debug logging
+  console.log('QuantumDashboard - selectedStops:', selectedStops);
+  console.log('QuantumDashboard - stops:', stops);
+  console.log('QuantumDashboard - selectedStopData:', selectedStopData);
 
   const handleOptimize = async () => {
-    if (selectedStops.length < 2) {
+    if (selectedStopData.length < 2) {
       alert('Please select at least 2 stops for optimization');
       return;
     }
@@ -46,10 +55,18 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         optimization_level: optimizationParams.optimization_level
       });
 
+      console.log('Optimization result:', result);
+
+      // Ensure the result has the expected structure
+      if (!result.route || !Array.isArray(result.route)) {
+        throw new Error('Invalid optimization result: missing route array');
+      }
+
       setProgress(100);
       setCurrentStep('Optimization complete!');
       
       setTimeout(() => {
+        console.log('Calling onOptimizationComplete with:', result);
         onOptimizationComplete(result);
       }, 500);
 
@@ -83,7 +100,13 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
         <div className="optimization-setup">
           <div className="selected-stops-info">
-            <h3>Selected Stops ({selectedStops.length})</h3>
+            <h3>Selected Stops ({selectedStopData.length})</h3>
+            
+            {/* Debug info - remove this after fixing */}
+            <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '1rem' }}>
+              Debug: {selectedStops.length} IDs selected, {stops.length} total stops, {selectedStopData.length} valid stops found
+            </div>
+            
             {selectedStopData.length > 0 ? (
               <div className="stops-grid">
                 {selectedStopData.map((stop, index) => (
@@ -92,7 +115,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                     <div className="stop-info">
                       <strong>{stop.name}</strong>
                       <span className="coordinates">
-                        {stop.latitude.toFixed(4)}, {stop.longitude.toFixed(4)}
+                        {parseFloat(stop.latitude).toFixed(4)}, {parseFloat(stop.longitude).toFixed(4)}
                       </span>
                     </div>
                   </div>
@@ -101,12 +124,17 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             ) : (
               <div className="no-stops-selected">
                 <span className="icon">⚠️</span>
-                <p>No stops selected. Please select stops from the Manage Stops tab.</p>
+                <p>
+                  {selectedStops.length === 0 
+                    ? 'No stops selected. Please select stops from the Manage Stops tab.'
+                    : 'Selected stops data not found. Please refresh and try again.'
+                  }
+                </p>
               </div>
             )}
           </div>
 
-          {selectedStops.length >= 2 && (
+          {selectedStopData.length >= 2 && (
             <div className="optimization-params">
               <h3>Optimization Parameters</h3>
               
@@ -179,7 +207,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
           <button
             className="btn btn-primary btn-large"
             onClick={handleOptimize}
-            disabled={selectedStops.length < 2 || loading}
+            disabled={selectedStopData.length < 2 || loading}
           >
             {loading ? (
               <>

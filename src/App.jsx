@@ -43,11 +43,19 @@ function App() {
   };
 
   const handleStopSelection = (stopId, selected) => {
+    console.log('App - handleStopSelection:', stopId, selected);
     if (selected) {
       setSelectedStops(prev => [...prev, stopId]);
     } else {
       setSelectedStops(prev => prev.filter(id => id !== stopId));
     }
+  };
+
+  const handleOptimizationComplete = (result) => {
+    console.log('App - Optimization completed with result:', result);
+    setOptimizedRoute(result);
+    // Automatically switch to results tab
+    setActiveTab('results');
   };
 
   const tabs = [
@@ -119,7 +127,7 @@ function App() {
               <QuantumDashboard
                 selectedStops={selectedStops}
                 stops={stops}
-                onOptimizationComplete={setOptimizedRoute}
+                onOptimizationComplete={handleOptimizationComplete}
                 loading={loading}
                 setLoading={setLoading}
               />
@@ -132,6 +140,12 @@ function App() {
                 route={optimizedRoute}
                 stops={stops}
               />
+              {optimizedRoute && (
+                <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666', padding: '1rem', background: '#f5f5f5', borderRadius: '8px' }}>
+                  <strong>Debug - Route Data:</strong>
+                  <pre>{JSON.stringify(optimizedRoute, null, 2)}</pre>
+                </div>
+              )}
             </div>
           )}
         </div>
