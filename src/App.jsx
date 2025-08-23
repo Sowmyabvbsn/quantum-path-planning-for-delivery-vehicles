@@ -44,10 +44,21 @@ function App() {
 
   const handleStopSelection = (stopId, selected) => {
     console.log('App - handleStopSelection:', stopId, selected);
+    console.log('App - Current selectedStops before update:', selectedStops);
+    console.log('App - Available stops:', stops.map(s => ({ id: s.id, name: s.name })));
+    
     if (selected) {
-      setSelectedStops(prev => [...prev, stopId]);
+      setSelectedStops(prev => {
+        const newSelection = [...prev, stopId];
+        console.log('App - Adding stop, new selection:', newSelection);
+        return newSelection;
+      });
     } else {
-      setSelectedStops(prev => prev.filter(id => id !== stopId));
+      setSelectedStops(prev => {
+        const newSelection = prev.filter(id => id !== stopId);
+        console.log('App - Removing stop, new selection:', newSelection);
+        return newSelection;
+      });
     }
   };
 
@@ -125,6 +136,21 @@ function App() {
 
           {activeTab === 'optimize' && (
             <div className="tab-content">
+              {/* Add some debug info at the top level */}
+              <div style={{ 
+                fontSize: '0.75rem', 
+                color: '#666', 
+                marginBottom: '1rem', 
+                padding: '0.5rem', 
+                background: '#f0f9ff', 
+                borderRadius: '4px',
+                border: '1px solid #e0f2fe'
+              }}>
+                <strong>App State Debug:</strong><br/>
+                Selected Stop IDs: {JSON.stringify(selectedStops)}<br/>
+                Total Stops Loaded: {stops.length}<br/>
+                Stops with IDs: {stops.map(s => s.id).join(', ')}<br/>
+              </div>
               <QuantumDashboard
                 selectedStops={selectedStops}
                 stops={stops}

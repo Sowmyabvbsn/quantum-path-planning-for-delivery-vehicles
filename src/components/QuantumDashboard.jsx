@@ -12,16 +12,58 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const [currentStep, setCurrentStep] = useState('');
   const [previewRoute, setPreviewRoute] = useState(null);
 
-  // Filter selected stops and ensure we have valid data
-  const selectedStopData = stops.filter(stop => 
-    selectedStops.includes(stop.id) && stop.id && stop.name && 
-    stop.latitude !== undefined && stop.longitude !== undefined
-  );
-
   // Debug logging
-  console.log('QuantumDashboard - selectedStops:', selectedStops);
-  console.log('QuantumDashboard - stops:', stops);
-  console.log('QuantumDashboard - selectedStopData:', selectedStopData);
+  console.log('QuantumDashboard render - selectedStops:', selectedStops);
+  console.log('QuantumDashboard render - stops:', stops);
+  console.log('QuantumDashboard render - selectedStops type:', typeof selectedStops);
+  console.log('QuantumDashboard render - stops type:', typeof stops);
+
+  // Filter selected stops and ensure we have valid data
+  const selectedStopData = React.useMemo(() => {
+    console.log('Computing selectedStopData...');
+    
+    // Ensure we have valid arrays
+    if (!Array.isArray(selectedStops)) {
+      console.log('selectedStops is not an array:', selectedStops);
+      return [];
+    }
+    
+    if (!Array.isArray(stops)) {
+      console.log('stops is not an array:', stops);
+      return [];
+    }
+    
+    if (selectedStops.length === 0) {
+      console.log('No stops selected');
+      return [];
+    }
+    
+    if (stops.length === 0) {
+      console.log('No stops available');
+      return [];
+    }
+    
+    console.log('Filtering stops...');
+    console.log('Available stop IDs:', stops.map(s => s.id));
+    console.log('Selected stop IDs:', selectedStops);
+    
+    const filtered = stops.filter(stop => {
+      const isSelected = selectedStops.includes(stop.id);
+      const hasValidData = stop && 
+        typeof stop.id !== 'undefined' && 
+        stop.name && 
+        typeof stop.latitude !== 'undefined' && 
+        typeof stop.longitude !== 'undefined' &&
+        !isNaN(parseFloat(stop.latitude)) && 
+        !isNaN(parseFloat(stop.longitude));
+      
+      console.log(`Stop ${stop.id} (${stop.name}): selected=${isSelected}, valid=${hasValidData}`);
+      return isSelected && hasValidData;
+    });
+    
+    console.log('Filtered result:', filtered);
+    return filtered;
+  }, [selectedStops, stops]);
 
   const handleOptimize = async () => {
     if (selectedStopData.length < 2) {
@@ -59,7 +101,6 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
       console.log('Optimization result:', result);
 
-      // Ensure the result has the expected structure
       if (!result.route || !Array.isArray(result.route)) {
         throw new Error('Invalid optimization result: missing route array');
       }
@@ -68,7 +109,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       setCurrentStep('Optimization complete!');
       
       setTimeout(() => {
-        console.log('QuantumDashboard - Calling onOptimizationComplete with result:', result);
+        console.log('Calling onOptimizationComplete with result:', result);
         onOptimizationComplete(result);
       }, 500);
 
@@ -88,7 +129,6 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const generatePreviewRoute = () => {
     if (selectedStopData.length < 2) return;
     
-    // Create a simple preview route for visualization
     const previewRouteData = {
       route: selectedStopData.map((_, index) => index),
       stops: selectedStopData,
@@ -116,14 +156,32 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
           <p>Optimize delivery routes using QAOA quantum algorithm</p>
         </div>
 
+        {/* Debug Information Panel */}
+        <div style={{ 
+          fontSize: '0.8rem', 
+          color: '#666', 
+          marginBottom: '1rem', 
+          padding: '1rem', 
+          background: '#f8f9fa', 
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <strong>🔍 Debug Information:</strong><br/>
+          <div style={{ marginTop: '0.5rem', fontFamily: 'monospace' }}>
+            Selected Stop IDs: {JSON.stringify(selectedStops)}<br/>
+            Selected Stops Type: {typeof selectedStops} (Array: {Array.isArray(selectedStops) ? 'Yes' : 'No'})<br/>
+            Total Stops Available: {stops ? stops.length : 'undefined'}<br/>
+            Stops Type: {typeof stops} (Array: {Array.isArray(stops) ? 'Yes' : 'No'})<br/>
+            Valid Selected Stops Found: {selectedStopData.length}<br/>
+            {stops && stops.length > 0 && (
+              <>Available Stop IDs: {stops.map(s => s.id).join(', ')}<br/></>
+            )}
+          </div>
+        </div>
+
         <div className="optimization-setup">
           <div className="selected-stops-info">
             <h3>Selected Stops ({selectedStopData.length})</h3>
-            
-            {/* Debug info - remove this after fixing */}
-            <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '1rem' }}>
-              Debug: {selectedStops.length} IDs selected, {stops.length} total stops, {selectedStopData.length} valid stops found
-            </div>
             
             {selectedStopData.length > 0 ? (
               <div className="stops-grid">
@@ -142,12 +200,35 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             ) : (
               <div className="no-stops-selected">
                 <span className="icon">⚠️</span>
-                <p>
-                  {selectedStops.length === 0 
-                    ? 'No stops selected. Please select stops from the Manage Stops tab.'
-                    : 'Selected stops data not found. Please refresh and try again.'
-                  }
-                </p>
+                {!Array.isArray(selectedStops) ? (
+                  <div>
+                    <h4>Invalid Selection Data</h4>
+                    <p>Selected stops data is not in the expected format. Please refresh the page and try again.</p>
+                  </div>
+                ) : selectedStops.length === 0 ? (
+                  <div>
+                    <h4>No stops selected</h4>
+                    <p>Please go to the "Manage Stops" tab and select at least 2 stops for optimization.</p>
+                  </div>
+                ) : !Array.isArray(stops) || stops.length === 0 ? (
+                  <div>
+                    <h4>No stops data available</h4>
+                    <p>Please add some stops first using the "Add Stops" or "CSV Upload" tabs.</p>
+                  </div>
+                ) : (
+                  <div>
+                    <h4>Selected stops not found</h4>
+                    <p>
+                      {selectedStops.length} stop(s) selected but matching data not found. 
+                      This might be due to:
+                    </p>
+                    <ul style={{ textAlign: 'left', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                      <li>Stops were deleted after selection</li>
+                      <li>Data loading issue - try refreshing the page</li>
+                      <li>Database connection problem</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </div>
