@@ -158,27 +158,11 @@ function RouteDisplay({ route, stops }) {
               <InteractiveMap
                 stops={routeStops}
                 route={mapRouteData}
-                onStopClick={setSelectedStop}
                 showAnimation={showAnimation}
                 onAnimationComplete={() => setShowAnimation(false)}
+                height="500px"
               />
             </div>
-            
-            {selectedStop && (
-              <div className="selected-stop-info">
-                <div className="stop-details-card">
-                  <h4>📍 {selectedStop.name}</h4>
-                  <p>Coordinates: {parseFloat(selectedStop.latitude).toFixed(4)}, {parseFloat(selectedStop.longitude).toFixed(4)}</p>
-                  <p>Added: {new Date(selectedStop.created_at).toLocaleDateString()}</p>
-                  <button 
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setSelectedStop(null)}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
           
           <div className="route-header">

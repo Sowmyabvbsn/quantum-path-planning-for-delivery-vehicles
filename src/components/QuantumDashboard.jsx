@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { optimizeRoute } from '../services/api';
-import InteractiveMap from './InteractiveMap';
 
 function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loading, setLoading }) {
   const [optimizationParams, setOptimizationParams] = useState({
@@ -12,6 +11,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const [currentStep, setCurrentStep] = useState('');
   const [previewRoute, setPreviewRoute] = useState(null);
   const [message, setMessage] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   // Filter selected stops and ensure we have valid data
   const selectedStopData = useMemo(() => {
@@ -96,16 +96,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   const generatePreviewRoute = () => {
     if (selectedStopData.length < 2) return;
     
-    const previewRouteData = {
-      route: selectedStopData.map((_, index) => index),
-      stops: selectedStopData,
-      total_distance: 0,
-      computation_time: 0,
-      quantum_backend: 'Preview',
-      optimization_level: 0
-    };
-    
-    setPreviewRoute(previewRouteData);
+    setShowPreview(!showPreview);
   };
 
   const handleParamChange = (param, value) => {
@@ -168,21 +159,49 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   onClick={generatePreviewRoute}
                   disabled={loading}
                 >
-                  {previewRoute ? '🔄 Update Preview' : '👁️ Show Preview'}
+                  {showPreview ? '🙈 Hide Preview' : '👁️ Show Preview'}
                 </button>
               </div>
               
-              <div className="preview-map-container">
-                <InteractiveMap
-                  stops={selectedStopData}
-                  route={previewRoute}
-                  showAnimation={false}
-                />
-              </div>
+              {showPreview && (
+                <div className="preview-map-container">
+                  <div style={{
+                    height: '300px',
+                    background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px dashed #cbd5e0',
+                    color: '#64748b'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
+                      <h4>Interactive Map Preview</h4>
+                      <p>Selected stops: {selectedStopData.length}</p>
+                      <div style={{ marginTop: '1rem' }}>
+                        {selectedStopData.map((stop, index) => (
+                          <div key={stop.id} style={{ 
+                            display: 'inline-block', 
+                            margin: '0.25rem',
+                            padding: '0.25rem 0.5rem',
+                            background: '#667eea',
+                            color: 'white',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem'
+                          }}>
+                            {index + 1}. {stop.name}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="preview-info">
                 <p className="preview-note">
-                  💡 This preview shows your selected stops. The actual optimized route will be calculated using quantum algorithms.
+                  💡 The interactive map will be available after optimization. The actual optimized route will be calculated using quantum algorithms.
                 </p>
               </div>
             </div>

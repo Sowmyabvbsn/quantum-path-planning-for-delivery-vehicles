@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapLegend from './MapLegend';
 
-// Fix for default markers in react-leaflet
+// Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -55,80 +54,22 @@ const obstacleIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
-// Component to fit map bounds to show all markers
-function MapBounds({ bounds }) {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (bounds && bounds.length > 0) {
-      const leafletBounds = L.latLngBounds(bounds);
-      map.fitBounds(leafletBounds, { padding: [20, 20] });
-    }
-  }, [bounds, map]);
-  
-  return null;
-}
-
-// Component for animated route drawing
-function AnimatedRoute({ route, isAnimating, onAnimationComplete }) {
-  const [visibleSegments, setVisibleSegments] = useState(0);
-  const map = useMap();
-  
-  useEffect(() => {
-    if (!isAnimating || !route || route.length < 2) {
-      setVisibleSegments(route ? route.length - 1 : 0);
-      return;
-    }
-    
-    setVisibleSegments(0);
-    const totalSegments = route.length - 1;
-    let currentSegment = 0;
-    
-    const animationInterval = setInterval(() => {
-      currentSegment++;
-      setVisibleSegments(currentSegment);
-      
-      if (currentSegment >= totalSegments) {
-        clearInterval(animationInterval);
-        if (onAnimationComplete) {
-          onAnimationComplete();
-        }
-      }
-    }, 800);
-    
-    return () => clearInterval(animationInterval);
-  }, [isAnimating, route, onAnimationComplete]);
-  
-  if (!route || route.length < 2) return null;
-  
-  const segments = [];
-  for (let i = 0; i < Math.min(visibleSegments, route.length - 1); i++) {
-    segments.push(
-      <Polyline
-        key={`segment-${i}`}
-        positions={[route[i], route[i + 1]]}
-        color="#667eea"
-        weight={4}
-        opacity={0.8}
-        dashArray="10, 5"
-      />
-    );
-  }
-  
-  return <>{segments}</>;
-}
-
 function InteractiveMap({ 
   stops = [], 
   route = null, 
   obstacles = [], 
   onStopClick = null,
   showAnimation = false,
-  onAnimationComplete = null 
+  onAnimationComplete = null,
+  height = '500px'
 }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
+  const routeLayerRef = useRef(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [currentObstacles, setCurrentObstacles] = useState(obstacles);
-  const mapRef = useRef();
+  const [mapReady, setMapReady] = useState(false);
 
   // Generate some sample obstacles for demonstration
   useEffect(() => {
@@ -138,135 +79,364 @@ function InteractiveMap({
     }
   }, [stops, obstacles]);
 
-  // Start animation when route changes
+  // Initialize map
   useEffect(() => {
-    if (showAnimation && route && route.length > 0) {
-      setIsAnimating(true);
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    try {
+      // Validate stops data
+      const validStops = stops.filter(stop => 
+        stop && 
+        stop.latitude && 
+        stop.longitude && 
+        !isNaN(parseFloat(stop.latitude)) && 
+        !isNaN(parseFloat(stop.longitude))
+      );
+
+      // Calculate center point
+      let center = [40.7128, -74.0060]; // Default to NYC
+      let zoom = 4;
+      
+      if (validStops.length > 0) {
+        const avgLat = validStops.reduce((sum, stop) => sum + parseFloat(stop.latitude), 0) / validStops.length;
+        const avgLng = validStops.reduce((sum, stop) => sum + parseFloat(stop.longitude), 0) / validStops.length;
+        center = [avgLat, avgLng];
+        zoom = validStops.length === 1 ? 10 : 8;
+      }
+
+      // Create map
+      const map = L.map(mapRef.current, {
+        center: center,
+        zoom: zoom,
+        zoomControl: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        dragging: true
+      });
+
+      // Add tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 18
+      }).addTo(map);
+
+      mapInstanceRef.current = map;
+      setMapReady(true);
+
+      // Handle map ready event
+      map.whenReady(() => {
+        console.log('Map is ready');
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 100);
+      });
+
+    } catch (error) {
+      console.error('Error initializing map:', error);
     }
-  }, [route, showAnimation]);
 
-  const handleAnimationComplete = () => {
-    setIsAnimating(false);
-    if (onAnimationComplete) {
-      onAnimationComplete();
-    }
-  };
+    return () => {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+          mapInstanceRef.current = null;
+          setMapReady(false);
+        } catch (error) {
+          console.error('Error cleaning up map:', error);
+        }
+      }
+    };
+  }, []);
 
-  // Calculate map bounds
-  const bounds = stops.length > 0 
-    ? stops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)])
-    : [[40.7128, -74.0060], [40.7589, -73.9851]]; // Default to NYC area
+  // Update markers when stops change
+  useEffect(() => {
+    if (!mapInstanceRef.current || !mapReady) return;
 
-  // Convert route indices to coordinates
-  const routeCoordinates = route && route.route 
-    ? route.route.map(stopIndex => {
-        const stop = stops.find(s => s.id === stopIndex) || stops[stopIndex];
-        return stop ? [parseFloat(stop.latitude), parseFloat(stop.longitude)] : null;
-      }).filter(Boolean)
-    : [];
+    try {
+      // Clear existing markers
+      markersRef.current.forEach(marker => {
+        try {
+          mapInstanceRef.current.removeLayer(marker);
+        } catch (error) {
+          console.warn('Error removing marker:', error);
+        }
+      });
+      markersRef.current = [];
 
-  // Calculate route with obstacle avoidance
-  const optimizedRoute = routeCoordinates.length > 0 
-    ? calculateRouteWithObstacles(routeCoordinates, currentObstacles)
-    : [];
+      // Validate stops data
+      const validStops = stops.filter(stop => 
+        stop && 
+        stop.latitude && 
+        stop.longitude && 
+        !isNaN(parseFloat(stop.latitude)) && 
+        !isNaN(parseFloat(stop.longitude))
+      );
 
-  return (
-    <div style={{ height: '500px', width: '100%', borderRadius: '12px', overflow: 'hidden' }}>
-      <MapContainer
-        ref={mapRef}
-        center={bounds[0] || [40.7128, -74.0060]}
-        zoom={10}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={true}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        
-        <MapBounds bounds={bounds} />
-        
-        {/* Render stops */}
-        {stops.map((stop, index) => {
+      if (validStops.length === 0) return;
+
+      // Add new markers
+      validStops.forEach((stop, index) => {
+        try {
           const isInRoute = route && route.route && route.route.includes(stop.id);
           const routeIndex = isInRoute ? route.route.indexOf(stop.id) + 1 : null;
           
-          return (
-            <Marker
-              key={stop.id}
-              position={[parseFloat(stop.latitude), parseFloat(stop.longitude)]}
-              icon={createCustomIcon(
+          const marker = L.marker(
+            [parseFloat(stop.latitude), parseFloat(stop.longitude)],
+            {
+              icon: createCustomIcon(
                 isInRoute ? '#667eea' : '#64748b',
                 routeIndex || (index + 1)
-              )}
-              eventHandlers={{
-                click: () => onStopClick && onStopClick(stop)
-              }}
-            >
-              <Popup>
-                <div style={{ minWidth: '200px' }}>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>{stop.name}</h4>
-                  <p style={{ margin: '4px 0', fontSize: '0.875rem', color: '#64748b' }}>
-                    📍 {parseFloat(stop.latitude).toFixed(4)}, {parseFloat(stop.longitude).toFixed(4)}
-                  </p>
-                  {isInRoute && (
-                    <p style={{ margin: '4px 0', fontSize: '0.875rem', color: '#667eea', fontWeight: 'bold' }}>
-                      🚛 Stop #{routeIndex} in route
-                    </p>
-                  )}
-                  <p style={{ margin: '4px 0', fontSize: '0.75rem', color: '#9ca3af' }}>
-                    Added: {new Date(stop.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
+              )
+            }
           );
-        })}
-        
-        {/* Render obstacles */}
-        {currentObstacles.map((obstacle, index) => (
-          <Marker
-            key={`obstacle-${index}`}
-            position={[obstacle.lat, obstacle.lng]}
-            icon={obstacleIcon}
-          >
-            <Popup>
-              <div>
-                <h4 style={{ margin: '0 0 8px 0', color: '#ef4444' }}>⚠️ {obstacle.type}</h4>
-                <p style={{ margin: '4px 0', fontSize: '0.875rem' }}>{obstacle.description}</p>
-                <p style={{ margin: '4px 0', fontSize: '0.75rem', color: '#9ca3af' }}>
-                  Severity: {obstacle.severity}
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-        
-        {/* Render optimized route */}
-        {optimizedRoute.length > 0 && (
-          <AnimatedRoute
-            route={optimizedRoute}
-            isAnimating={isAnimating}
-            onAnimationComplete={handleAnimationComplete}
-          />
-        )}
-        
-        {/* Render direct route for comparison (lighter color) */}
-        {routeCoordinates.length > 0 && !isAnimating && (
-          <Polyline
-            positions={routeCoordinates}
-            color="#e2e8f0"
-            weight={2}
-            opacity={0.5}
-            dashArray="5, 10"
-          />
-        )}
-        
-        {/* Add map legend */}
-        <div style={{ position: 'absolute', bottom: '10px', right: '10px', zIndex: 1000 }}>
-          <MapLegend />
+
+          // Add popup
+          const popupContent = `
+            <div style="min-width: 200px;">
+              <h4 style="margin: 0 0 8px 0; color: #1e293b;">${stop.name}</h4>
+              <p style="margin: 4px 0; font-size: 0.875rem; color: #64748b;">
+                📍 ${parseFloat(stop.latitude).toFixed(4)}, ${parseFloat(stop.longitude).toFixed(4)}
+              </p>
+              ${isInRoute ? `<p style="margin: 4px 0; font-size: 0.875rem; color: #667eea; font-weight: bold;">
+                🚛 Stop #${routeIndex} in route
+              </p>` : ''}
+              <p style="margin: 4px 0; font-size: 0.75rem; color: #9ca3af;">
+                Added: ${new Date(stop.created_at).toLocaleDateString()}
+              </p>
+            </div>
+          `;
+
+          marker.bindPopup(popupContent);
+
+          // Add click handler
+          if (onStopClick) {
+            marker.on('click', () => onStopClick(stop));
+          }
+
+          marker.addTo(mapInstanceRef.current);
+          markersRef.current.push(marker);
+        } catch (error) {
+          console.warn('Error adding marker for stop:', stop.name, error);
+        }
+      });
+
+      // Add obstacle markers
+      currentObstacles.forEach((obstacle, index) => {
+        try {
+          const obstacleMarker = L.marker(
+            [obstacle.lat, obstacle.lng],
+            { icon: obstacleIcon }
+          );
+
+          const obstaclePopup = `
+            <div>
+              <h4 style="margin: 0 0 8px 0; color: #ef4444;">⚠️ ${obstacle.type}</h4>
+              <p style="margin: 4px 0; font-size: 0.875rem;">${obstacle.description}</p>
+              <p style="margin: 4px 0; font-size: 0.75rem; color: #9ca3af;">
+                Severity: ${obstacle.severity}
+              </p>
+            </div>
+          `;
+
+          obstacleMarker.bindPopup(obstaclePopup);
+          obstacleMarker.addTo(mapInstanceRef.current);
+          markersRef.current.push(obstacleMarker);
+        } catch (error) {
+          console.warn('Error adding obstacle marker:', error);
+        }
+      });
+
+      // Fit bounds to show all markers
+      if (validStops.length > 0) {
+        try {
+          const bounds = validStops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)]);
+          mapInstanceRef.current.fitBounds(bounds, { padding: [20, 20] });
+        } catch (error) {
+          console.warn('Error fitting bounds:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating markers:', error);
+    }
+  }, [stops, route, currentObstacles, onStopClick, mapReady]);
+
+  // Update route when route changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !mapReady) return;
+
+    try {
+      // Clear existing route
+      if (routeLayerRef.current) {
+        mapInstanceRef.current.removeLayer(routeLayerRef.current);
+        routeLayerRef.current = null;
+      }
+
+      // Validate stops data
+      const validStops = stops.filter(stop => 
+        stop && 
+        stop.latitude && 
+        stop.longitude && 
+        !isNaN(parseFloat(stop.latitude)) && 
+        !isNaN(parseFloat(stop.longitude))
+      );
+
+      if (!route || !route.route || route.route.length < 2 || validStops.length === 0) return;
+
+      // Convert route indices to coordinates
+      const routeCoordinates = route.route.map(stopIndex => {
+        const stop = validStops.find(s => s.id === stopIndex) || validStops[stopIndex];
+        return stop ? [parseFloat(stop.latitude), parseFloat(stop.longitude)] : null;
+      }).filter(Boolean);
+
+      if (routeCoordinates.length < 2) return;
+
+      // Calculate route with obstacle avoidance
+      const optimizedRoute = calculateRouteWithObstacles(routeCoordinates, currentObstacles);
+
+      // Add route polyline
+      if (showAnimation) {
+        animateRoute(optimizedRoute);
+      } else {
+        routeLayerRef.current = L.polyline(optimizedRoute, {
+          color: '#667eea',
+          weight: 4,
+          opacity: 0.8
+        }).addTo(mapInstanceRef.current);
+
+        // Add direct route for comparison
+        L.polyline(routeCoordinates, {
+          color: '#e2e8f0',
+          weight: 2,
+          opacity: 0.5,
+          dashArray: '5, 10'
+        }).addTo(mapInstanceRef.current);
+      }
+    } catch (error) {
+      console.error('Error updating route:', error);
+    }
+  }, [route, stops, currentObstacles, showAnimation, mapReady]);
+
+  // Animation function
+  const animateRoute = (routeCoordinates) => {
+    if (!mapInstanceRef.current || routeCoordinates.length < 2) return;
+
+    setIsAnimating(true);
+    let segmentIndex = 0;
+    const segments = [];
+
+    const animateSegment = () => {
+      if (segmentIndex >= routeCoordinates.length - 1) {
+        setIsAnimating(false);
+        if (onAnimationComplete) {
+          onAnimationComplete();
+        }
+        return;
+      }
+
+      try {
+        const segment = L.polyline(
+          [routeCoordinates[segmentIndex], routeCoordinates[segmentIndex + 1]],
+          {
+            color: '#667eea',
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '10, 5'
+          }
+        ).addTo(mapInstanceRef.current);
+
+        segments.push(segment);
+        segmentIndex++;
+
+        setTimeout(animateSegment, 800);
+      } catch (error) {
+        console.warn('Error in animation segment:', error);
+        setIsAnimating(false);
+      }
+    };
+
+    animateSegment();
+  };
+
+  // Handle animation trigger
+  useEffect(() => {
+    if (showAnimation && route && route.route && route.route.length > 0) {
+      // Re-trigger route update with animation
+      const event = new CustomEvent('triggerAnimation');
+      window.dispatchEvent(event);
+    }
+  }, [showAnimation]);
+
+  // If no valid stops, show a simple placeholder
+  const validStops = stops.filter(stop => 
+    stop && 
+    stop.latitude && 
+    stop.longitude && 
+    !isNaN(parseFloat(stop.latitude)) && 
+    !isNaN(parseFloat(stop.longitude))
+  );
+
+  if (validStops.length === 0) {
+    return (
+      <div style={{ 
+        height: height, 
+        width: '100%', 
+        borderRadius: '12px', 
+        overflow: 'hidden',
+        position: 'relative',
+        background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '2px dashed #cbd5e0'
+      }}>
+        <div style={{ 
+          textAlign: 'center',
+          color: '#64748b'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🗺️</div>
+          <h4>No stops to display</h4>
+          <p>Add some stops to see them on the map</p>
         </div>
-      </MapContainer>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ height: height, width: '100%', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+      <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+      
+      {/* Animation status */}
+      {isAnimating && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          background: 'rgba(255, 255, 255, 0.9)',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          fontSize: '0.875rem',
+          color: '#667eea',
+          fontWeight: '500',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: '#10b981',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}></div>
+          Animating route...
+        </div>
+      )}
+      
+      {/* Map legend */}
+      <div style={{ position: 'absolute', bottom: '10px', right: '10px', zIndex: 1000 }}>
+        <MapLegend />
+      </div>
     </div>
   );
 }
@@ -288,6 +458,10 @@ function generateSampleObstacles(stops) {
   for (let i = 0; i < Math.min(stops.length - 1, 3); i++) {
     const stop1 = stops[i];
     const stop2 = stops[i + 1];
+    
+    if (!stop1 || !stop2 || !stop1.latitude || !stop1.longitude || !stop2.latitude || !stop2.longitude) {
+      continue;
+    }
     
     // Create obstacle roughly between two stops
     const midLat = (parseFloat(stop1.latitude) + parseFloat(stop2.latitude)) / 2;
@@ -385,10 +559,6 @@ function calculateAvoidanceWaypoints(start, end, obstacles) {
     const obstaclePoint = [obstacle.lat, obstacle.lng];
     
     // Calculate perpendicular offset to avoid obstacle
-    const midLat = (start[0] + end[0]) / 2;
-    const midLng = (start[1] + end[1]) / 2;
-    
-    // Create waypoint offset from the obstacle
     const offsetDistance = 0.008; // Roughly 800 meters
     const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
     const perpAngle = angle + Math.PI / 2;
