@@ -136,21 +136,6 @@ function App() {
 
           {activeTab === 'optimize' && (
             <div className="tab-content">
-              {/* Add some debug info at the top level */}
-              <div style={{ 
-                fontSize: '0.75rem', 
-                color: '#666', 
-                marginBottom: '1rem', 
-                padding: '0.5rem', 
-                background: '#f0f9ff', 
-                borderRadius: '4px',
-                border: '1px solid #e0f2fe'
-              }}>
-                <strong>App State Debug:</strong><br/>
-                Selected Stop IDs: {JSON.stringify(selectedStops)}<br/>
-                Total Stops Loaded: {stops.length}<br/>
-                Stops with IDs: {stops.map(s => s.id).join(', ')}<br/>
-              </div>
               <QuantumDashboard
                 selectedStops={selectedStops}
                 stops={stops}
@@ -167,12 +152,6 @@ function App() {
                 route={optimizedRoute}
                 stops={stops}
               />
-              {optimizedRoute && (
-                <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666', padding: '1rem', background: '#f5f5f5', borderRadius: '8px' }}>
-                  <strong>Debug - Route Data:</strong>
-                  <pre>{JSON.stringify(optimizedRoute, null, 2)}</pre>
-                </div>
-              )}
             </div>
           )}
         </div>
