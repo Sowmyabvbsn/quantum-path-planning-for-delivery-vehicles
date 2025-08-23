@@ -112,10 +112,6 @@ function App() {
 
       <main className="app-main">
         <div className="content-wrapper">
-          <div style={{ background: '#fff3cd', padding: '0.5rem', margin: '0.5rem 0', borderRadius: '4px', fontSize: '0.875rem' }}>
-            <strong>Active Tab:</strong> {activeTab}
-          </div>
-          
           {activeTab === 'entry' && (
             <div className="tab-content">
               <StopEntry onStopAdded={handleStopAdded} />
@@ -141,15 +137,11 @@ function App() {
 
           {activeTab === 'optimize' && (
             <div className="tab-content">
-              <div style={{ background: '#d4edda', padding: '1rem', margin: '1rem 0', borderRadius: '8px', border: '1px solid #c3e6cb' }}>
-                <h3>✅ Quantum Optimization Tab Active</h3>
-                <p>This message confirms the tab is rendering correctly.</p>
-              </div>
-              <div style={{ background: '#f0f0f0', padding: '1rem', margin: '1rem 0', borderRadius: '8px' }}>
-                <h4>App Debug Info:</h4>
-                <p>Selected Stops: {JSON.stringify(selectedStops)}</p>
-                <p>Total Stops: {stops.length}</p>
-                <p>Stops Data: {JSON.stringify(stops.slice(0, 2))}...</p>
+              <div style={{ padding: '1rem', background: '#f0f0f0', marginBottom: '1rem' }}>
+                <strong>Debug Info:</strong>
+                <div>Selected Stops: {JSON.stringify(selectedStops)}</div>
+                <div>Total Stops: {stops.length}</div>
+                <div>Active Tab: {activeTab}</div>
               </div>
               <QuantumDashboard
                 selectedStops={selectedStops}
