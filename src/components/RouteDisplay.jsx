@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import InteractiveMap from './InteractiveMap';
 
 function RouteDisplay({ route, stops }) {
   const [showDetails, setShowDetails] = useState(true);
+  const [showAnimation, setShowAnimation] = useState(false);
+  const [selectedStop, setSelectedStop] = useState(null);
 
   console.log('RouteDisplay - route:', route);
   console.log('RouteDisplay - stops:', stops);
@@ -30,33 +33,30 @@ function RouteDisplay({ route, stops }) {
             <span className="empty-icon">⚠️</span>
             <h3>Invalid Route Data</h3>
             <p>The optimization result doesn't contain valid route information</p>
-            <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666', background: '#f5f5f5', padding: '1rem', borderRadius: '8px' }}>
-              <strong>Debug - Route object:</strong>
-              <pre>{JSON.stringify(route, null, 2)}</pre>
-            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Get the route stops by mapping route indices to actual stop data
-  const routeStops = route.route.map(stopIndex => {
-    // If route.stops exists, use it directly
-    if (route.stops && route.stops[stopIndex]) {
-      return route.stops[stopIndex];
-    }
-    
-    // Otherwise, find the stop in the main stops array
-    // The stopIndex might be the actual stop ID or an array index
-    let stop = stops.find(s => s.id === stopIndex);
-    if (!stop) {
-      // Try treating it as an array index
-      stop = stops[stopIndex];
-    }
-    
-    return stop;
-  }).filter(Boolean); // Remove any undefined stops
+  // Get the route stops - use route.stops if available, otherwise map from main stops array
+  let routeStops = [];
+  
+  if (route.stops && Array.isArray(route.stops) && route.stops.length > 0) {
+    // Use the stops data directly from the route response
+    routeStops = route.stops;
+  } else {
+    // Map route indices to actual stop data
+    routeStops = route.route.map(stopIndex => {
+      // Try to find stop by ID first
+      let stop = stops.find(s => s.id === stopIndex);
+      if (!stop) {
+        // Try treating it as an array index
+        stop = stops[stopIndex];
+      }
+      return stop;
+    }).filter(Boolean); // Remove any undefined stops
+  }
 
   console.log('RouteDisplay - routeStops:', routeStops);
 
@@ -68,11 +68,11 @@ function RouteDisplay({ route, stops }) {
             <span className="empty-icon">⚠️</span>
             <h3>No Valid Stops Found</h3>
             <p>Could not map the route to valid stop data</p>
-            <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666', background: '#f5f5f5', padding: '1rem', borderRadius: '8px' }}>
+            <div className="debug-info">
               <strong>Debug Info:</strong>
               <div>Route indices: {JSON.stringify(route.route)}</div>
               <div>Available stops: {stops.length}</div>
-              <div>Route.stops: {route.stops ? 'exists' : 'missing'}</div>
+              <div>Route.stops exists: {route.stops ? 'Yes' : 'No'}</div>
             </div>
           </div>
         </div>
@@ -92,6 +92,16 @@ function RouteDisplay({ route, stops }) {
       return `${(seconds * 1000).toFixed(0)} ms`;
     }
     return `${seconds.toFixed(3)} s`;
+  };
+
+  // Create route data structure for the map
+  const mapRouteData = {
+    route: routeStops.map(stop => stop.id),
+    stops: routeStops,
+    total_distance: route.total_distance,
+    computation_time: route.computation_time,
+    quantum_backend: route.quantum_backend,
+    optimization_level: route.optimization_level
   };
 
   return (
@@ -131,8 +141,48 @@ function RouteDisplay({ route, stops }) {
         </div>
 
         <div className="route-visualization">
+          <div className="map-section">
+            <div className="map-header">
+              <h3>🗺️ Interactive Route Map</h3>
+              <div className="map-controls">
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAnimation(!showAnimation)}
+                >
+                  {showAnimation ? '⏸️ Stop Animation' : '▶️ Animate Route'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="map-container">
+              <InteractiveMap
+                stops={routeStops}
+                route={mapRouteData}
+                onStopClick={setSelectedStop}
+                showAnimation={showAnimation}
+                onAnimationComplete={() => setShowAnimation(false)}
+              />
+            </div>
+            
+            {selectedStop && (
+              <div className="selected-stop-info">
+                <div className="stop-details-card">
+                  <h4>📍 {selectedStop.name}</h4>
+                  <p>Coordinates: {parseFloat(selectedStop.latitude).toFixed(4)}, {parseFloat(selectedStop.longitude).toFixed(4)}</p>
+                  <p>Added: {new Date(selectedStop.created_at).toLocaleDateString()}</p>
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setSelectedStop(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          
           <div className="route-header">
-            <h3>Route Sequence</h3>
+            <h3>📋 Route Sequence</h3>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowDetails(!showDetails)}
@@ -238,14 +288,6 @@ function RouteDisplay({ route, stops }) {
             💾 Export Route
           </button>
         </div>
-      </div>
-
-      {/* Debug section - remove after fixing */}
-      <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666', background: '#f5f5f5', padding: '1rem', borderRadius: '8px' }}>
-        <strong>Debug - Full Route Data:</strong>
-        <pre>{JSON.stringify(route, null, 2)}</pre>
-        <strong>Mapped Route Stops:</strong>
-        <pre>{JSON.stringify(routeStops, null, 2)}</pre>
       </div>
     </div>
   );

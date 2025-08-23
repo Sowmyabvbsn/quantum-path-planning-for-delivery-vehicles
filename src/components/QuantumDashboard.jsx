@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { optimizeRoute } from '../services/api';
+import InteractiveMap from './InteractiveMap';
 
 function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loading, setLoading }) {
   const [optimizationParams, setOptimizationParams] = useState({
@@ -9,6 +10,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   });
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
+  const [previewRoute, setPreviewRoute] = useState(null);
 
   // Filter selected stops and ensure we have valid data
   const selectedStopData = stops.filter(stop => 
@@ -66,7 +68,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       setCurrentStep('Optimization complete!');
       
       setTimeout(() => {
-        console.log('Calling onOptimizationComplete with:', result);
+        console.log('QuantumDashboard - Calling onOptimizationComplete with result:', result);
         onOptimizationComplete(result);
       }, 500);
 
@@ -81,6 +83,22 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         setCurrentStep('');
       }, 1000);
     }
+  };
+
+  const generatePreviewRoute = () => {
+    if (selectedStopData.length < 2) return;
+    
+    // Create a simple preview route for visualization
+    const previewRouteData = {
+      route: selectedStopData.map((_, index) => index),
+      stops: selectedStopData,
+      total_distance: 0,
+      computation_time: 0,
+      quantum_backend: 'Preview',
+      optimization_level: 0
+    };
+    
+    setPreviewRoute(previewRouteData);
   };
 
   const handleParamChange = (param, value) => {
@@ -133,6 +151,35 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
               </div>
             )}
           </div>
+
+          {selectedStopData.length >= 2 && (
+            <div className="route-preview-section">
+              <div className="preview-header">
+                <h3>🗺️ Route Preview</h3>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={generatePreviewRoute}
+                  disabled={loading}
+                >
+                  {previewRoute ? '🔄 Update Preview' : '👁️ Show Preview'}
+                </button>
+              </div>
+              
+              <div className="preview-map-container">
+                <InteractiveMap
+                  stops={selectedStopData}
+                  route={previewRoute}
+                  showAnimation={false}
+                />
+              </div>
+              
+              <div className="preview-info">
+                <p className="preview-note">
+                  💡 This preview shows your selected stops. The actual optimized route will be calculated using quantum algorithms.
+                </p>
+              </div>
+            </div>
+          )}
 
           {selectedStopData.length >= 2 && (
             <div className="optimization-params">

@@ -52,7 +52,8 @@ function App() {
   };
 
   const handleOptimizationComplete = (result) => {
-    console.log('App - Optimization completed with result:', result);
+    console.log('App - handleOptimizationComplete called with:', result);
+    console.log('App - Current stops array:', stops);
     setOptimizedRoute(result);
     // Automatically switch to results tab
     setActiveTab('results');

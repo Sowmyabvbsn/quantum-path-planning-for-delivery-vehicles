@@ -970,6 +970,27 @@ body {
   justify-content: center;
 }
 
+/* Debug info styles */
+.debug-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.debug-info strong {
+  color: #374151;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.debug-info div {
+  margin: 0.25rem 0;
+}
+
 /* Footer */
 .app-footer {
   margin-top: 4rem;
@@ -999,6 +1020,156 @@ body {
 .tech-badge.quantum {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);
   color: white;
+}
+
+/* Interactive Map Styles */
+.map-section {
+  margin-bottom: 2rem;
+}
+
+.map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.map-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.map-container {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.selected-stop-info {
+  margin-top: 1rem;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.stop-details-card {
+  background: rgba(102, 126, 234, 0.05);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.stop-details-card h4 {
+  margin: 0 0 0.5rem 0;
+  color: #1e293b;
+}
+
+.stop-details-card p {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* Leaflet custom styles */
+.custom-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.obstacle-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Map legend */
+.map-legend {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+  z-index: 1000;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Route animation styles */
+.route-animation-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.animation-status {
+  font-size: 0.875rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.animation-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animation-indicator.stopped {
+  background: #6b7280;
+  animation: none;
+}
+
+/* Route Preview Styles */
+.route-preview-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.preview-map-container {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  margin-bottom: 1rem;
+}
+
+.preview-info {
+  text-align: center;
+}
+
+.preview-note {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-style: italic;
+  margin: 0;
 }
 
 /* Responsive design */
@@ -1071,6 +1242,17 @@ body {
   .tech-badges {
     flex-direction: column;
     align-items: center;
+  }
+  
+  .map-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  
+  .map-controls {
+    width: 100%;
+    justify-content: center;
   }
 }
 
