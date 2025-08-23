@@ -3,6 +3,10 @@ import { optimizeRoute } from '../services/api';
 import InteractiveMap from './InteractiveMap';
 
 function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loading, setLoading }) {
+  console.log('QuantumDashboard - selectedStops:', selectedStops);
+  console.log('QuantumDashboard - stops:', stops);
+  console.log('QuantumDashboard - Props received:', { selectedStops, stops: stops?.length, loading });
+  
   const [optimizationParams, setOptimizationParams] = useState({
     start_index: 0,
     quantum_backend: 'qasm_simulator',
@@ -14,29 +18,39 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
   // Filter selected stops and ensure we have valid data
   const selectedStopData = useMemo(() => {
+    console.log('QuantumDashboard - Computing selectedStopData...');
+    console.log('QuantumDashboard - selectedStops type:', typeof selectedStops, Array.isArray(selectedStops));
+    console.log('QuantumDashboard - stops type:', typeof stops, Array.isArray(stops));
+    
     if (!Array.isArray(selectedStops) || !Array.isArray(stops)) {
+      console.log('QuantumDashboard - Invalid array types, returning empty array');
       return [];
     }
     
     if (selectedStops.length === 0 || stops.length === 0) {
+      console.log('QuantumDashboard - Empty arrays, returning empty array');
       return [];
     }
     
     const filtered = stops.filter(stop => {
       const isSelected = selectedStops.includes(stop.id);
-      const hasValidData = stop && 
-        typeof stop.id !== 'undefined' && 
-        stop.name && 
-        typeof stop.latitude !== 'undefined' && 
-        typeof stop.longitude !== 'undefined' &&
-        !isNaN(parseFloat(stop.latitude)) && 
-        !isNaN(parseFloat(stop.longitude));
+      const hasValidData = stop && stop.id && stop.name && stop.latitude && stop.longitude;
+      
+      console.log('QuantumDashboard - Stop check:', {
+        stopId: stop?.id,
+        stopName: stop?.name,
+        isSelected,
+        hasValidData
+      });
       
       return isSelected && hasValidData;
     });
     
+    console.log('QuantumDashboard - Filtered stops:', filtered);
     return filtered;
   }, [selectedStops, stops]);
+
+  console.log('QuantumDashboard - Final selectedStopData:', selectedStopData);
 
   const handleOptimize = async () => {
     if (selectedStopData.length < 2) {
@@ -124,11 +138,35 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         <div className="card-header">
           <h2>🚀 Quantum Route Optimization</h2>
           <p>Optimize delivery routes using QAOA quantum algorithm</p>
+          <div style={{ 
+            background: '#e3f2fd', 
+            padding: '0.5rem', 
+            borderRadius: '4px', 
+            fontSize: '0.875rem',
+            marginTop: '0.5rem'
+          }}>
+            <strong>Component Status:</strong> Rendered successfully
+          </div>
         </div>
 
         <div className="optimization-setup">
           <div className="selected-stops-info">
             <h3>Selected Stops ({selectedStopData.length})</h3>
+            
+            {/* Debug information */}
+            <div style={{ 
+              background: '#f8fafc', 
+              padding: '1rem', 
+              borderRadius: '8px', 
+              marginBottom: '1rem',
+              fontSize: '0.875rem',
+              color: '#64748b'
+            }}>
+              <strong>Debug Info:</strong>
+              <div>Selected Stop IDs: {JSON.stringify(selectedStops)}</div>
+              <div>Total Stops Available: {stops?.length || 0}</div>
+              <div>Filtered Selected Stops: {selectedStopData.length}</div>
+            </div>
             
             {selectedStopData.length > 0 ? (
               <div className="stops-grid">
@@ -149,7 +187,12 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                 <span className="icon">⚠️</span>
                 <div>
                   <h4>No stops selected</h4>
-                  <p>Please go to the "Manage Stops" tab and select at least 2 stops for optimization.</p>
+                  <p>
+                    {selectedStops?.length === 0 
+                      ? 'Please go to the "Manage Stops" tab and select at least 2 stops for optimization.'
+                      : `Selected ${selectedStops?.length || 0} stops but they may not have valid data. Check the debug info above.`
+                    }
+                  </p>
                 </div>
               </div>
             )}

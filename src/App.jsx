@@ -65,6 +65,7 @@ function App() {
   const handleOptimizationComplete = (result) => {
     console.log('App - handleOptimizationComplete called with:', result);
     console.log('App - Current stops array:', stops);
+    console.log('App - Current selectedStops:', selectedStops);
     setOptimizedRoute(result);
     // Automatically switch to results tab
     setActiveTab('results');
@@ -111,6 +112,10 @@ function App() {
 
       <main className="app-main">
         <div className="content-wrapper">
+          <div style={{ background: '#fff3cd', padding: '0.5rem', margin: '0.5rem 0', borderRadius: '4px', fontSize: '0.875rem' }}>
+            <strong>Active Tab:</strong> {activeTab}
+          </div>
+          
           {activeTab === 'entry' && (
             <div className="tab-content">
               <StopEntry onStopAdded={handleStopAdded} />
@@ -136,6 +141,16 @@ function App() {
 
           {activeTab === 'optimize' && (
             <div className="tab-content">
+              <div style={{ background: '#d4edda', padding: '1rem', margin: '1rem 0', borderRadius: '8px', border: '1px solid #c3e6cb' }}>
+                <h3>✅ Quantum Optimization Tab Active</h3>
+                <p>This message confirms the tab is rendering correctly.</p>
+              </div>
+              <div style={{ background: '#f0f0f0', padding: '1rem', margin: '1rem 0', borderRadius: '8px' }}>
+                <h4>App Debug Info:</h4>
+                <p>Selected Stops: {JSON.stringify(selectedStops)}</p>
+                <p>Total Stops: {stops.length}</p>
+                <p>Stops Data: {JSON.stringify(stops.slice(0, 2))}...</p>
+              </div>
               <QuantumDashboard
                 selectedStops={selectedStops}
                 stops={stops}
