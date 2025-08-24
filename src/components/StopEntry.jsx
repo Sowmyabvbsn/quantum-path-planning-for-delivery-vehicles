@@ -75,29 +75,51 @@ function StopEntry({ onStopAdded }) {
     <div className="stop-entry">
       <div className="card">
         <div className="card-header">
-          <h2>Add New Stop</h2>
-          <p>Enter delivery stop coordinates manually</p>
+          <div>
+            <h2>📍 Add New Stop</h2>
+            <p>Enter delivery stop coordinates manually with precise location data</p>
+          </div>
+          <div style={{ 
+            background: 'rgba(102, 126, 234, 0.1)', 
+            padding: '0.75rem 1rem', 
+            borderRadius: '12px',
+            border: '1px solid rgba(102, 126, 234, 0.2)'
+          }}>
+            <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#667eea' }}>
+              🎯 Manual Entry
+            </div>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="stop-form">
           <div className="form-group">
-            <label htmlFor="name">Stop Name</label>
+            <label htmlFor="name">
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                🏷️ Stop Name
+              </span>
+            </label>
             <input
               type="text"
               id="name"
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="e.g., Main Distribution Center"
+              placeholder="e.g., Main Distribution Center, Customer Location A"
               required
+              style={{ 
+                background: 'rgba(248, 250, 252, 0.8)',
+                border: '2px solid #e5e7eb'
+              }}
             />
           </div>
 
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="latitude">
-                Latitude
-                <span className="help-text">(-90 to 90)</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🌍 Latitude
+                  <span className="help-text">(-90 to 90)</span>
+                </span>
               </label>
               <input
                 type="number"
@@ -108,13 +130,19 @@ function StopEntry({ onStopAdded }) {
                 placeholder="40.7128"
                 step="any"
                 required
+                style={{ 
+                  background: 'rgba(248, 250, 252, 0.8)',
+                  border: '2px solid #e5e7eb'
+                }}
               />
             </div>
 
             <div className="form-group">
               <label htmlFor="longitude">
-                Longitude
-                <span className="help-text">(-180 to 180)</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🌐 Longitude
+                  <span className="help-text">(-180 to 180)</span>
+                </span>
               </label>
               <input
                 type="number"
@@ -125,6 +153,10 @@ function StopEntry({ onStopAdded }) {
                 placeholder="-74.0060"
                 step="any"
                 required
+                style={{ 
+                  background: 'rgba(248, 250, 252, 0.8)',
+                  border: '2px solid #e5e7eb'
+                }}
               />
             </div>
           </div>
@@ -134,13 +166,16 @@ function StopEntry({ onStopAdded }) {
               type="button"
               className="btn btn-secondary"
               onClick={fillSampleData}
+              style={{ flex: '1' }}
             >
+              <span>🎲</span>
               Use Sample Data
             </button>
             <button
               type="submit"
               className="btn btn-primary"
               disabled={loading}
+              style={{ flex: '2' }}
             >
               {loading ? (
                 <>
@@ -165,12 +200,41 @@ function StopEntry({ onStopAdded }) {
       </div>
 
       <div className="info-card">
-        <h3>📍 Location Tips</h3>
+        <h3>💡 Location Entry Tips</h3>
+        <div style={{ 
+          background: 'rgba(102, 126, 234, 0.05)', 
+          padding: '1.5rem', 
+          borderRadius: '12px', 
+          marginTop: '1rem',
+          border: '1px solid rgba(102, 126, 234, 0.1)'
+        }}>
+          <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
+            🎯 Coordinate Format
+          </h4>
+          <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.875rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Use decimal degrees format (e.g., 40.7128, -74.0060)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Latitude: North (+) / South (-)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Longitude: East (+) / West (-)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ color: '#667eea' }}>🔍</span>
+              <span>Use Google Maps to find precise coordinates</span>
+            </div>
+          </div>
+        </div>
         <ul>
-          <li>Use decimal degrees format (e.g., 40.7128, -74.0060)</li>
-          <li>Latitude: North (+) / South (-)</li>
-          <li>Longitude: East (+) / West (-)</li>
-          <li>Use tools like Google Maps to find precise coordinates</li>
+          <li>Right-click on Google Maps to get coordinates</li>
+          <li>Ensure accuracy for optimal route calculation</li>
+          <li>Double-check coordinates before adding</li>
+          <li>Use the sample data button for quick testing</li>
         </ul>
       </div>
     </div>
