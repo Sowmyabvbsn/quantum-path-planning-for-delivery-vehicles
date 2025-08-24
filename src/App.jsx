@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import StopEntry from './components/StopEntry';
 import CSVUpload from './components/CSVUpload';
+import ImageOCRUpload from './components/ImageOCRUpload';
 import RouteDisplay from './components/RouteDisplay';
 import StopsList from './components/StopsList';
 import QuantumDashboard from './components/QuantumDashboard';
@@ -74,6 +75,7 @@ function App() {
   const tabs = [
     { id: 'entry', label: 'Add Stops', icon: '📍' },
     { id: 'upload', label: 'CSV Upload', icon: '📄' },
+    { id: 'ocr', label: 'OCR Upload', icon: '📷' },
     { id: 'manage', label: 'Manage Stops', icon: '🗂️' },
     { id: 'optimize', label: 'Quantum Optimization', icon: '🚀' },
     { id: 'results', label: 'Results', icon: '📊' }
@@ -121,6 +123,12 @@ function App() {
           {activeTab === 'upload' && (
             <div className="tab-content">
               <CSVUpload onStopsUploaded={handleStopAdded} />
+            </div>
+          )}
+
+          {activeTab === 'ocr' && (
+            <div className="tab-content">
+              <ImageOCRUpload onStopsUploaded={handleStopAdded} />
             </div>
           )}
 

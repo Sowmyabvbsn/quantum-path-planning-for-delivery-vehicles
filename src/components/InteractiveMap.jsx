@@ -356,11 +356,17 @@ function InteractiveMap({
           const isInRoute = route && route.route && route.route.includes(stop.id);
           const routeIndex = isInRoute ? route.route.indexOf(stop.id) + 1 : null;
           
+          // Check if this is an OCR-extracted stop
+          const isOCRStop = stop.name && stop.name.includes(',') && 
+                           (stop.name.includes('Maharashtra') || stop.name.includes('Delhi') || 
+                            stop.name.includes('Karnataka') || stop.name.includes('Tamil Nadu') ||
+                            stop.name.includes('West Bengal') || stop.source === 'OCR');
+          
           const marker = L.marker(
             [parseFloat(stop.latitude), parseFloat(stop.longitude)],
             {
               icon: createCustomIcon(
-                isInRoute ? '#667eea' : '#64748b',
+                isInRoute ? '#667eea' : (isOCRStop ? '#10b981' : '#64748b'),
                 routeIndex || (index + 1)
               )
             }
@@ -369,6 +375,9 @@ function InteractiveMap({
           const popupContent = `
             <div style="min-width: 200px;">
               <h4 style="margin: 0 0 8px 0; color: #1e293b;">${stop.name}</h4>
+              ${isOCRStop ? `<p style="margin: 4px 0; font-size: 0.75rem; color: #10b981; font-weight: bold;">
+                🔍 OCR Extracted Location
+              </p>` : ''}
               <p style="margin: 4px 0; font-size: 0.875rem; color: #64748b;">
                 📍 ${parseFloat(stop.latitude).toFixed(4)}, ${parseFloat(stop.longitude).toFixed(4)}
               </p>

@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import io
+import base64
+from PIL import Image
 from typing import List, Optional
 import logging
 from contextlib import asynccontextmanager

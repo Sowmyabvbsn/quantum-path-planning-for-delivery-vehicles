@@ -15,6 +15,11 @@ function MapLegend({ isVisible = true }) {
       </div>
       
       <div className="legend-item">
+        <div className="legend-color" style={{ background: '#10b981' }}></div>
+        <span>OCR Extracted</span>
+      </div>
+      
+      <div className="legend-item">
         <div className="legend-color" style={{ background: '#64748b' }}></div>
         <span>Other Stops</span>
       </div>
