@@ -72,18 +72,19 @@ function StopEntry({ onStopAdded }) {
   };
 
   return (
-    <div className="stop-entry">
+    <div className="stop-entry w-full box-border">
       <div className="card">
         <div className="card-header">
           <div>
             <h2>📍 Add New Stop</h2>
             <p>Enter delivery stop coordinates manually with precise location data</p>
           </div>
-          <div style={{ 
+          <div style={{
             background: 'rgba(102, 126, 234, 0.1)', 
             padding: '0.75rem 1rem', 
             borderRadius: '12px',
-            border: '1px solid rgba(102, 126, 234, 0.2)'
+            border: '1px solid rgba(102, 126, 234, 0.2)',
+            minWidth: 'fit-content'
           }}>
             <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#667eea' }}>
               🎯 Manual Entry
@@ -91,8 +92,8 @@ function StopEntry({ onStopAdded }) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="stop-form">
-          <div className="form-group">
+        <form onSubmit={handleSubmit} className="stop-form w-full box-border">
+          <div className="form-group w-full box-border">
             <label htmlFor="name">
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 🏷️ Stop Name
@@ -113,8 +114,12 @@ function StopEntry({ onStopAdded }) {
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
+          <div className="form-row w-full box-border" style={{
+            display: 'grid',
+            gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '1fr 1fr',
+            gap: '1.5rem'
+          }}>
+            <div className="form-group w-full box-border">
               <label htmlFor="latitude">
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   🌍 Latitude
@@ -137,7 +142,7 @@ function StopEntry({ onStopAdded }) {
               />
             </div>
 
-            <div className="form-group">
+            <div className="form-group w-full box-border">
               <label htmlFor="longitude">
                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   🌐 Longitude
@@ -161,12 +166,22 @@ function StopEntry({ onStopAdded }) {
             </div>
           </div>
 
-          <div className="form-actions">
+          <div className="form-actions" style={{
+            display: 'flex',
+            gap: '1rem',
+            justifyContent: 'flex-end',
+            marginTop: '2rem',
+            flexWrap: 'wrap',
+            width: '100%'
+          }}>
             <button
               type="button"
               className="btn btn-secondary"
               onClick={fillSampleData}
-              style={{ flex: '1' }}
+              style={{ 
+                flex: window.innerWidth <= 768 ? '1 1 100%' : '1',
+                order: window.innerWidth <= 768 ? 2 : 1
+              }}
             >
               <span>🎲</span>
               Use Sample Data
@@ -175,7 +190,10 @@ function StopEntry({ onStopAdded }) {
               type="submit"
               className="btn btn-primary"
               disabled={loading}
-              style={{ flex: '2' }}
+              style={{ 
+                flex: window.innerWidth <= 768 ? '1 1 100%' : '2',
+                order: window.innerWidth <= 768 ? 1 : 2
+              }}
             >
               {loading ? (
                 <>
@@ -199,7 +217,7 @@ function StopEntry({ onStopAdded }) {
         )}
       </div>
 
-      <div className="info-card">
+      <div className="info-card w-full box-border">
         <h3>💡 Location Entry Tips</h3>
         <div style={{ 
           background: 'rgba(102, 126, 234, 0.05)', 
@@ -211,7 +229,11 @@ function StopEntry({ onStopAdded }) {
           <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
             🎯 Coordinate Format
           </h4>
-          <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.875rem' }}>
+          <div style={{ 
+            display: 'grid', 
+            gap: '0.75rem', 
+            fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ color: '#10b981' }}>✅</span>
               <span>Use decimal degrees format (e.g., 40.7128, -74.0060)</span>
@@ -230,7 +252,10 @@ function StopEntry({ onStopAdded }) {
             </div>
           </div>
         </div>
-        <ul>
+        <ul style={{ 
+          fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
+          lineHeight: '1.5'
+        }}>
           <li>Right-click on Google Maps to get coordinates</li>
           <li>Ensure accuracy for optimal route calculation</li>
           <li>Double-check coordinates before adding</li>

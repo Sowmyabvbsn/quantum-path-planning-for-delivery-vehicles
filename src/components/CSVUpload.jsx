@@ -110,18 +110,19 @@ function CSVUpload({ onStopsUploaded }) {
   };
 
   return (
-    <div className="csv-upload">
+    <div className="csv-upload w-full box-border">
       <div className="card">
         <div className="card-header">
           <div>
             <h2>📄 Upload Stops from CSV</h2>
             <p>Bulk import delivery stops from a CSV file for efficient data entry</p>
           </div>
-          <div style={{ 
+          <div style={{
             background: 'rgba(16, 185, 129, 0.1)', 
             padding: '0.75rem 1rem', 
             borderRadius: '12px',
-            border: '1px solid rgba(16, 185, 129, 0.2)'
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            minWidth: 'fit-content'
           }}>
             <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#10b981' }}>
               📊 Bulk Import
@@ -129,8 +130,8 @@ function CSVUpload({ onStopsUploaded }) {
           </div>
         </div>
 
-        <div className="upload-section">
-          <div className="file-input-wrapper">
+        <div className="upload-section w-full box-border">
+          <div className="file-input-wrapper w-full box-border">
             <input
               type="file"
               id="csv-file"
@@ -139,7 +140,9 @@ function CSVUpload({ onStopsUploaded }) {
               className="file-input"
             />
             <label htmlFor="csv-file" className="file-input-label">
-              <div className="upload-icon">📄</div>
+              <div className="upload-icon" style={{
+                fontSize: window.innerWidth <= 768 ? '2.5rem' : '3rem'
+              }}>📄</div>
               <div className="upload-text">
                 {file ? (
                   <div>
@@ -164,11 +167,21 @@ function CSVUpload({ onStopsUploaded }) {
             </label>
           </div>
 
-          <div className="upload-actions">
+          <div className="upload-actions" style={{
+            display: 'flex',
+            gap: '1rem',
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            marginTop: '1.5rem',
+            width: '100%'
+          }}>
             <button
               className="btn btn-secondary"
               onClick={downloadSample}
-              style={{ flex: '1' }}
+              style={{ 
+                flex: window.innerWidth <= 768 ? '1 1 100%' : '1',
+                order: window.innerWidth <= 768 ? 2 : 1
+              }}
             >
               <span>⬇️</span>
               Download Sample CSV
@@ -178,7 +191,10 @@ function CSVUpload({ onStopsUploaded }) {
               className="btn btn-primary"
               onClick={handleUpload}
               disabled={!file || loading}
-              style={{ flex: '1' }}
+              style={{ 
+                flex: window.innerWidth <= 768 ? '1 1 100%' : '1',
+                order: window.innerWidth <= 768 ? 1 : 2
+              }}
             >
               {loading ? (
                 <>
@@ -196,7 +212,7 @@ function CSVUpload({ onStopsUploaded }) {
         </div>
 
         {preview && (
-          <div className="csv-preview">
+          <div className="csv-preview w-full box-border">
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
@@ -205,17 +221,29 @@ function CSVUpload({ onStopsUploaded }) {
               padding: '1rem',
               background: 'rgba(102, 126, 234, 0.05)',
               borderRadius: '12px',
-              border: '1px solid rgba(102, 126, 234, 0.1)'
+              border: '1px solid rgba(102, 126, 234, 0.1)',
+              flexWrap: 'wrap'
             }}>
-              <span style={{ fontSize: '1.5rem' }}>👁️</span>
+              <span style={{ 
+                fontSize: window.innerWidth <= 768 ? '1.25rem' : '1.5rem',
+                flexShrink: 0
+              }}>👁️</span>
               <div>
-                <h3 style={{ margin: '0', color: '#667eea' }}>CSV Preview</h3>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#64748b' }}>
+                <h3 style={{ 
+                  margin: '0', 
+                  color: '#667eea',
+                  fontSize: window.innerWidth <= 768 ? '1rem' : '1.125rem'
+                }}>CSV Preview</h3>
+                <p style={{ 
+                  margin: '0.25rem 0 0 0', 
+                  fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem', 
+                  color: '#64748b' 
+                }}>
                   Showing first 5 rows of your data
                 </p>
               </div>
             </div>
-            <div className="preview-table">
+            <div className="preview-table w-full box-border">
               <table>
                 <thead>
                   <tr>
@@ -267,7 +295,7 @@ function CSVUpload({ onStopsUploaded }) {
         )}
       </div>
 
-      <div className="info-card">
+      <div className="info-card w-full box-border">
         <h3>📋 CSV Format Requirements</h3>
         
         <div style={{ 
@@ -280,7 +308,12 @@ function CSVUpload({ onStopsUploaded }) {
           <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
             📊 Required Columns
           </h4>
-          <div style={{ display: 'grid', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          <div style={{ 
+            display: 'grid', 
+            gap: '0.75rem', 
+            marginBottom: '1.5rem',
+            fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <code style={{ 
                 background: '#667eea', 
@@ -290,7 +323,7 @@ function CSVUpload({ onStopsUploaded }) {
                 fontSize: '0.8125rem',
                 fontWeight: '600'
               }}>name</code>
-              <span style={{ fontSize: '0.875rem' }}>Stop name or description</span>
+              <span>Stop name or description</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <code style={{ 
@@ -301,7 +334,7 @@ function CSVUpload({ onStopsUploaded }) {
                 fontSize: '0.8125rem',
                 fontWeight: '600'
               }}>lat</code>
-              <span style={{ fontSize: '0.875rem' }}>Latitude (-90 to 90)</span>
+              <span>Latitude (-90 to 90)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <code style={{ 
@@ -312,7 +345,7 @@ function CSVUpload({ onStopsUploaded }) {
                 fontSize: '0.8125rem',
                 fontWeight: '600'
               }}>lng</code>
-              <span style={{ fontSize: '0.875rem' }}>Longitude (-180 to 180)</span>
+              <span>Longitude (-180 to 180)</span>
             </div>
           </div>
           
@@ -325,8 +358,9 @@ function CSVUpload({ onStopsUploaded }) {
             borderRadius: '8px', 
             border: '1px solid #e2e8f0',
             fontFamily: 'monospace',
-            fontSize: '0.8125rem',
-            overflow: 'auto'
+            fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.8125rem',
+            overflow: 'auto',
+            wordBreak: 'break-all'
           }}>
             <div style={{ color: '#667eea', fontWeight: '600', marginBottom: '0.5rem' }}>
               name,lat,lng
@@ -339,7 +373,11 @@ Customer B,40.6892,-74.0445
           </div>
         </div>
         
-        <ul style={{ marginTop: '1.5rem' }}>
+        <ul style={{ 
+          marginTop: '1.5rem',
+          fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
+          lineHeight: '1.5'
+        }}>
           <li>Ensure your CSV file has headers in the first row</li>
           <li>Use comma-separated values without spaces after commas</li>
           <li>Coordinates should be in decimal degrees format</li>

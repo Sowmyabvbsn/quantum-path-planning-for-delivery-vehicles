@@ -171,24 +171,37 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   console.log('QuantumDashboard render - selectedStopData:', selectedStopData);
 
   return (
-    <div className="quantum-dashboard">
+    <div className="quantum-dashboard w-full box-border">
       <div className="card">
         <div className="card-header">
           <h2>🚀 Quantum Route Optimization</h2>
           <p>Advanced route optimization using quantum QAOA + classical algorithms</p>
         </div>
 
-        <div className="optimization-setup">
+        <div className="optimization-setup w-full box-border">
           {/* Current Location Section */}
           {userLocation && (
-            <div className="current-location-info">
+            <div className="current-location-info w-full box-border">
               <h3>📍 Current Location</h3>
-              <div className="location-card">
-                <div className="location-details">
+              <div className="location-card w-full box-border" style={{
+                display: 'flex',
+                flexDirection: window.innerWidth <= 768 ? 'column' : 'row',
+                gap: '1rem',
+                padding: '1rem',
+                background: 'rgba(16, 185, 129, 0.05)',
+                borderRadius: '12px',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+                marginBottom: '1.5rem'
+              }}>
+                <div className="location-details" style={{ flex: 1 }}>
                   <p><strong>Coordinates:</strong> {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}</p>
                   <p><strong>Accuracy:</strong> ±{userLocation.accuracy ? Math.round(userLocation.accuracy) : 'Unknown'} meters</p>
                 </div>
-                <div className="location-toggle">
+                <div className="location-toggle" style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  justifyContent: window.innerWidth <= 768 ? 'center' : 'flex-end'
+                }}>
                   <label>
                     <input
                       type="checkbox"
@@ -203,21 +216,31 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             </div>
           )}
 
-          <div className="selected-stops-info">
+          <div className="selected-stops-info w-full box-border">
             <h3>Selected Stops ({selectedStopData.length})</h3>
             
             {selectedStopData.length > 0 ? (
-              <div className="stops-grid">
+              <div className="stops-grid w-full box-border">
                 {selectedStopData.map((stop, index) => (
-                  <div key={stop.id} className="stop-card">
+                  <div key={stop.id} className="stop-card w-full box-border">
                     <div className="stop-index">{index + 1}</div>
-                    <div className="stop-info">
+                    <div className="stop-info" style={{ flex: 1, minWidth: 0 }}>
                       <strong>{stop.name}</strong>
-                      <span className="coordinates">
+                      <span className="coordinates" style={{ 
+                        display: 'block',
+                        fontSize: '0.75rem',
+                        color: '#64748b',
+                        marginBottom: '0.125rem',
+                        wordBreak: 'break-all'
+                      }}>
                         {parseFloat(stop.latitude).toFixed(4)}, {parseFloat(stop.longitude).toFixed(4)}
                       </span>
                       {userLocation && (
-                        <span className="distance-from-user">
+                        <span className="distance-from-user" style={{
+                          display: 'block',
+                          fontSize: '0.75rem',
+                          color: '#64748b'
+                        }}>
                           📍 {calculateDistance(
                             userLocation.latitude, userLocation.longitude,
                             parseFloat(stop.latitude), parseFloat(stop.longitude)
@@ -229,7 +252,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                 ))}
               </div>
             ) : (
-              <div className="no-stops-selected">
+              <div className="no-stops-selected w-full box-border">
                 <span className="icon">⚠️</span>
                 <div>
                   <h4>No stops selected</h4>
@@ -242,8 +265,15 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
           </div>
 
           {selectedStopData.length >= 2 && (
-            <div className="route-preview-section">
-              <div className="preview-header">
+            <div className="route-preview-section w-full box-border">
+              <div className="preview-header" style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
                 <h3>🗺️ Route Preview</h3>
                 <button
                   className="btn btn-secondary btn-sm"
@@ -256,7 +286,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
               </div>
               
               {showPreview && (
-                <div className="preview-map-container">
+                <div className="preview-map-container w-full box-border">
                   <InteractiveMap
                     stops={selectedStopData}
                     currentLocation={userLocation}
@@ -266,7 +296,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                 </div>
               )}
               
-              <div className="preview-info">
+              <div className="preview-info w-full box-border">
                 <p className="preview-note">
                   💡 Preview shows selected stops and current location. The optimized route will be calculated using hybrid quantum-classical algorithms.
                 </p>
@@ -275,11 +305,34 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
           )}
 
           {selectedStopData.length >= 2 && (
-            <div className="optimization-params">
+            <div className="optimization-params w-full box-border">
               <h3>Optimization Parameters</h3>
               
-              {!useCurrentLocation && (
-                <div className="param-group">
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: '1.5rem',
+                marginTop: '1rem'
+              }}>
+                {!useCurrentLocation && (
+                  <div className="param-group w-full box-border">
+                    <label>Starting Stop</label>
+                    <select
+                      value={optimizationParams.start_index}
+                      onChange={(e) => handleParamChange('start_index', parseInt(e.target.value))}
+                      disabled={loading}
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      {selectedStopData.map((stop, index) => (
+                        <option key={stop.id} value={index}>
+                          {index + 1}. {stop.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="param-group w-full box-border">
                   <label>Starting Stop</label>
                   <select
                     value={optimizationParams.start_index}
@@ -294,7 +347,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                     ))}
                   </select>
                 </div>
-              )}
+              
 
               <div className="param-group">
                 <label>Quantum Backend</label>
@@ -310,7 +363,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                 </select>
               </div>
 
-              <div className="param-group">
+                <div className="param-group w-full box-border">
                 <label>Optimization Level</label>
                 <select
                   value={optimizationParams.optimization_level}
@@ -323,24 +376,55 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   <option value={3}>Level 3 - Thorough (Full Hybrid)</option>
                 </select>
               </div>
+              </div>
             </div>
           )}
         </div>
 
         {loading && (
-          <div className="optimization-progress">
-            <div className="progress-header">
+          <div className="optimization-progress w-full box-border" style={{
+            padding: '2rem',
+            background: 'rgba(102, 126, 234, 0.05)',
+            borderRadius: '16px',
+            margin: '1.5rem 0'
+          }}>
+            <div className="progress-header" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem'
+            }}>
               <h3>🔬 Hybrid Quantum-Classical Computing</h3>
               <span className="progress-percent">{progress}%</span>
             </div>
-            <div className="progress-bar">
+            <div className="progress-bar" style={{
+              width: '100%',
+              height: '8px',
+              background: 'rgba(226, 232, 240, 0.5)',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              marginBottom: '1rem'
+            }}>
               <div 
                 className="progress-fill"
-                style={{ width: `${progress}%` }}
+                style={{ 
+                  width: `${progress}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                  transition: 'width 0.3s ease'
+                }}
               ></div>
             </div>
-            <p className="current-step">{currentStep}</p>
-            <div className="quantum-animation">
+            <p className="current-step" style={{
+              margin: '0 0 1rem 0',
+              color: '#64748b',
+              fontSize: '0.875rem'
+            }}>{currentStep}</p>
+            <div className="quantum-animation" style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}>
               <div className="quantum-particle"></div>
               <div className="quantum-particle"></div>
               <div className="quantum-particle"></div>
@@ -354,11 +438,18 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
           </div>
         )}
 
-        <div className="optimization-action">
+        <div className="optimization-action w-full box-border" style={{
+          padding: '2rem',
+          textAlign: 'center'
+        }}>
           <button
-            className="btn btn-primary btn-large"
+            className="btn btn-primary btn-large w-full"
             onClick={handleOptimize}
             disabled={selectedStopData.length < 2 || loading}
+            style={{
+              maxWidth: window.innerWidth <= 768 ? '100%' : '400px',
+              margin: '0 auto'
+            }}
           >
             {loading ? (
               <>
@@ -375,7 +466,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         </div>
       </div>
 
-      <div className="algorithm-info">
+      <div className="algorithm-info w-full box-border">
         <div className="info-card">
           <h3>🧮 Hybrid Quantum-Classical Optimization</h3>
           <p>

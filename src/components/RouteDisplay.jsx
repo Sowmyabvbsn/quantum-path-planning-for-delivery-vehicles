@@ -105,22 +105,26 @@ function RouteDisplay({ route, stops }) {
   };
 
   return (
-    <div className="route-display">
+    <div className="route-display w-full box-border">
       <div className="card">
         <div className="card-header">
           <div>
             <h2>🎯 Optimized Route</h2>
             <p>Quantum-optimized delivery path</p>
           </div>
-          <div className="route-status">
+          <div className="route-status" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
             <span className="status-badge success">
               ✅ Optimization Complete
             </span>
           </div>
         </div>
 
-        <div className="route-summary">
-          <div className="summary-stats">
+        <div className="route-summary w-full box-border">
+          <div className="summary-stats w-full box-border">
             <div className="stat-card">
               <div className="stat-value">{routeStops.length}</div>
               <div className="stat-label">Stops</div>
@@ -140,11 +144,21 @@ function RouteDisplay({ route, stops }) {
           </div>
         </div>
 
-        <div className="route-visualization">
-          <div className="map-section">
-            <div className="map-header">
+        <div className="route-visualization w-full box-border">
+          <div className="map-section w-full box-border">
+            <div className="map-header" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '1rem',
+              marginBottom: '1rem'
+            }}>
               <h3>🗺️ Interactive Route Map</h3>
-              <div className="map-controls">
+              <div className="map-controls" style={{
+                display: 'flex',
+                gap: '0.5rem'
+              }}>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setShowAnimation(!showAnimation)}
@@ -155,7 +169,7 @@ function RouteDisplay({ route, stops }) {
               </div>
             </div>
             
-            <div className="map-container">
+            <div className="map-container w-full box-border">
               <InteractiveMap
                 stops={routeStops}
                 route={mapRouteData}
@@ -166,7 +180,14 @@ function RouteDisplay({ route, stops }) {
             </div>
           </div>
           
-          <div className="route-header">
+          <div className="route-header" style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            margin: '2rem 0 1rem 0'
+          }}>
             <h3>📋 Route Sequence</h3>
             <button
               className="btn btn-secondary btn-sm"
@@ -177,28 +198,53 @@ function RouteDisplay({ route, stops }) {
             </button>
           </div>
 
-          <div className="route-path">
+          <div className="route-path w-full box-border">
             {routeStops.map((stop, index) => (
-              <div key={stop.id || index} className="route-step">
-                <div className="step-connector">
+              <div key={stop.id || index} className="route-step w-full box-border">
+                <div className="step-connector" style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flexShrink: 0
+                }}>
                   <div className="step-number">{index + 1}</div>
                   {index < routeStops.length - 1 && (
-                    <div className="connector-line">
+                    <div className="connector-line" style={{
+                      height: '30px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#cbd5e0',
+                      fontSize: '1.25rem'
+                    }}>
                       <span className="arrow">↓</span>
                     </div>
                   )}
                 </div>
                 
-                <div className="step-content">
-                  <div className="stop-info">
+                <div className="step-content" style={{
+                  flex: 1,
+                  minWidth: 0
+                }}>
+                  <div className="stop-info w-full box-border">
                     <h4>{stop.name || `Stop ${index + 1}`}</h4>
                     {showDetails && (
-                      <div className="stop-details">
-                        <span className="coordinates">
+                      <div className="stop-details" style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.25rem'
+                      }}>
+                        <span className="coordinates" style={{
+                          fontSize: '0.75rem',
+                          color: '#64748b'
+                        }}>
                           📍 {parseFloat(stop.latitude || 0).toFixed(4)}, {parseFloat(stop.longitude || 0).toFixed(4)}
                         </span>
                         {index < routeStops.length - 1 && (
-                          <span className="next-distance">
+                          <span className="next-distance" style={{
+                            fontSize: '0.75rem',
+                            color: '#64748b'
+                          }}>
                             🚛 Next: {formatDistance(
                               calculateDistance(stop, routeStops[index + 1])
                             )}
@@ -214,30 +260,64 @@ function RouteDisplay({ route, stops }) {
         </div>
 
         {showDetails && (
-          <div className="optimization-details">
+          <div className="optimization-details w-full box-border" style={{
+            padding: '2rem',
+            background: 'rgba(248, 250, 252, 0.8)',
+            borderRadius: '16px',
+            margin: '2rem 0'
+          }}>
             <h3>🔬 Quantum Optimization Details</h3>
-            <div className="details-grid">
-              <div className="detail-item">
+            <div className="details-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '1rem',
+              marginTop: '1rem'
+            }}>
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Algorithm:</strong>
                 <span>QAOA (Quantum Approximate Optimization Algorithm)</span>
               </div>
-              <div className="detail-item">
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Distance Calculation:</strong>
                 <span>Haversine Formula</span>
               </div>
-              <div className="detail-item">
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Route Type:</strong>
                 <span>One-way Optimization</span>
               </div>
-              <div className="detail-item">
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Optimization Level:</strong>
                 <span>Level {route.optimization_level || 1}</span>
               </div>
-              <div className="detail-item">
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Quantum Backend:</strong>
                 <span>{route.quantum_backend || 'Unknown'}</span>
               </div>
-              <div className="detail-item">
+              <div className="detail-item" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem'
+              }}>
                 <strong>Total Computation Time:</strong>
                 <span>{formatTime(route.computation_time || 0)}</span>
               </div>
@@ -245,10 +325,20 @@ function RouteDisplay({ route, stops }) {
           </div>
         )}
 
-        <div className="route-actions">
+        <div className="route-actions" style={{
+          display: 'flex',
+          gap: '1rem',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          padding: '2rem'
+        }}>
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary" 
             onClick={() => window.print()}
+            style={{
+              flex: window.innerWidth <= 768 ? '1 1 100%' : '0 1 auto',
+              minWidth: '150px'
+            }}
           >
             🖨️ Print Route
           </button>
@@ -269,6 +359,10 @@ function RouteDisplay({ route, stops }) {
               link.href = URL.createObjectURL(dataBlob);
               link.download = `quantum_route_${new Date().toISOString().split('T')[0]}.json`;
               link.click();
+            }}
+            style={{
+              flex: window.innerWidth <= 768 ? '1 1 100%' : '0 1 auto',
+              minWidth: '150px'
             }}
           >
             💾 Export Route
