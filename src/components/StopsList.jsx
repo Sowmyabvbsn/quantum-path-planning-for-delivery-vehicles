@@ -72,7 +72,7 @@ function StopsList({ stops, selectedStops, onStopSelection, onStopDeleted }) {
               </div>
             </div>
 
-            <div className="stops-table">
+            <div className="stops-table" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table>
                 <thead>
                   <tr>
@@ -96,6 +96,7 @@ function StopsList({ stops, selectedStops, onStopSelection, onStopDeleted }) {
                           checked={selectedStops.includes(stop.id)}
                           onChange={(e) => onStopSelection(stop.id, e.target.checked)}
                           className="stop-checkbox"
+                          style={{ touchAction: 'manipulation' }}
                         />
                       </td>
                       <td>
@@ -118,6 +119,7 @@ function StopsList({ stops, selectedStops, onStopSelection, onStopDeleted }) {
                           className="btn btn-danger btn-sm"
                           onClick={() => onStopDeleted(stop.id)}
                           title="Delete stop"
+                          style={{ touchAction: 'manipulation' }}
                         >
                           🗑️
                         </button>

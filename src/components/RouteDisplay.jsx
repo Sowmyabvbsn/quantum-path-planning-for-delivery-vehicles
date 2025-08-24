@@ -148,6 +148,7 @@ function RouteDisplay({ route, stops }) {
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setShowAnimation(!showAnimation)}
+                  style={{ touchAction: 'manipulation' }}
                 >
                   {showAnimation ? '⏸️ Stop Animation' : '▶️ Animate Route'}
                 </button>
@@ -160,7 +161,7 @@ function RouteDisplay({ route, stops }) {
                 route={mapRouteData}
                 showAnimation={showAnimation}
                 onAnimationComplete={() => setShowAnimation(false)}
-                height="500px"
+                height={window.innerWidth <= 768 ? "400px" : "500px"}
               />
             </div>
           </div>
@@ -170,6 +171,7 @@ function RouteDisplay({ route, stops }) {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setShowDetails(!showDetails)}
+              style={{ touchAction: 'manipulation' }}
             >
               {showDetails ? 'Hide Details' : 'Show Details'}
             </button>

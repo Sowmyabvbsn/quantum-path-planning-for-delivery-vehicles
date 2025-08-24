@@ -194,6 +194,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                       type="checkbox"
                       checked={useCurrentLocation}
                       onChange={handleLocationToggle}
+                      style={{ touchAction: 'manipulation' }}
                     />
                     Use as starting point
                   </label>
@@ -248,6 +249,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   className="btn btn-secondary btn-sm"
                   onClick={generatePreviewRoute}
                   disabled={loading}
+                  style={{ touchAction: 'manipulation' }}
                 >
                   {showPreview ? '🙈 Hide Preview' : '👁️ Show Preview'}
                 </button>
@@ -258,7 +260,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   <InteractiveMap
                     stops={selectedStopData}
                     currentLocation={userLocation}
-                    height="400px"
+                    height={window.innerWidth <= 768 ? "350px" : "400px"}
                     showAnimation={false}
                   />
                 </div>
@@ -283,6 +285,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                     value={optimizationParams.start_index}
                     onChange={(e) => handleParamChange('start_index', parseInt(e.target.value))}
                     disabled={loading}
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {selectedStopData.map((stop, index) => (
                       <option key={stop.id} value={index}>
@@ -299,6 +302,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   value={optimizationParams.quantum_backend}
                   onChange={(e) => handleParamChange('quantum_backend', e.target.value)}
                   disabled={loading}
+                  style={{ touchAction: 'manipulation' }}
                 >
                   <option value="qasm_simulator">QASM Simulator</option>
                   <option value="statevector_simulator">Statevector Simulator</option>
@@ -312,6 +316,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   value={optimizationParams.optimization_level}
                   onChange={(e) => handleParamChange('optimization_level', parseInt(e.target.value))}
                   disabled={loading}
+                  style={{ touchAction: 'manipulation' }}
                 >
                   <option value={1}>Level 1 - Fast (Classical only)</option>
                   <option value={2}>Level 2 - Balanced (Hybrid)</option>

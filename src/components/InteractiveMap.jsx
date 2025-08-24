@@ -222,7 +222,12 @@ function InteractiveMap({
         touchZoom: true,
         boxZoom: true,
         keyboard: true,
-        attributionControl: true
+        attributionControl: true,
+        // Mobile optimizations
+        tap: true,
+        tapTolerance: 15,
+        bounceAtZoomLimits: false,
+        maxBoundsViscosity: 0.8
       });
 
       // Add responsive tile layer with retina support
@@ -231,7 +236,11 @@ function InteractiveMap({
         maxZoom: 19,
         tileSize: 256,
         zoomOffset: 0,
-        detectRetina: true
+        detectRetina: true,
+        // Mobile performance optimizations
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        keepBuffer: 2
       }).addTo(map);
 
       mapInstanceRef.current = map;
@@ -258,6 +267,16 @@ function InteractiveMap({
         }, 100);
       });
 
+      // Mobile-specific event handlers
+      map.on('movestart', () => {
+        // Disable text selection during map interaction
+        document.body.style.userSelect = 'none';
+      });
+      
+      map.on('moveend', () => {
+        // Re-enable text selection
+        document.body.style.userSelect = '';
+      });
       return () => {
         resizeObserver.disconnect();
       };
