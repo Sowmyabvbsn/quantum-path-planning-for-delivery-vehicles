@@ -1,27 +1,95 @@
 import React, { useState } from 'react';
 import { addStop } from '../services/api';
+import geocodingService from '../services/geocodingService';
 
 function StopEntry({ onStopAdded }) {
   const [formData, setFormData] = useState({
     name: '',
+    location: '',
     latitude: '',
     longitude: ''
   });
+  const [inputMode, setInputMode] = useState('location'); // 'location' or 'coordinates'
   const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
   const [message, setMessage] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    
+    // Clear suggestions when user types
+    if (e.target.name === 'location') {
+      setShowSuggestions(false);
+      setLocationSuggestions([]);
+    }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!formData.location.trim()) {
+      setMessage('Please enter a location name');
+      return;
+    }
+
+    setGeocoding(true);
+    setMessage('');
+    setLocationSuggestions([]);
+
+    try {
+      const results = await geocodingService.geocodeLocation(formData.location, {
+        limit: 5,
+        countryCode: 'in' // Bias towards India, remove or change as needed
+      });
+
+      if (results.length === 0) {
+        setMessage('No locations found. Please try a different search term.');
+        return;
+      }
+
+      setLocationSuggestions(results);
+      setShowSuggestions(true);
+      setMessage(`Found ${results.length} location${results.length > 1 ? 's' : ''}. Please select one.`);
+
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      setMessage(`Geocoding failed: ${error.message}. You can switch to manual coordinate entry.`);
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const handleLocationSelect = (location) => {
+    setFormData({
+      ...formData,
+      name: formData.name || location.name,
+      location: location.name,
+      latitude: location.latitude.toString(),
+      longitude: location.longitude.toString()
+    });
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+    setMessage(`Selected: ${location.name}`);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.latitude || !formData.longitude) {
-      setMessage('All fields are required');
+    if (!formData.name) {
+      setMessage('Stop name is required');
+      return;
+    }
+
+    // Check if we have coordinates
+    if (!formData.latitude || !formData.longitude) {
+      if (inputMode === 'location' && formData.location) {
+        setMessage('Please search for the location first to get coordinates');
+      } else {
+        setMessage('Coordinates are required. Please search for a location or enter coordinates manually.');
+      }
       return;
     }
 
@@ -48,7 +116,9 @@ function StopEntry({ onStopAdded }) {
         longitude: lng
       });
 
-      setFormData({ name: '', latitude: '', longitude: '' });
+      setFormData({ name: '', location: '', latitude: '', longitude: '' });
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
       setMessage('Stop added successfully!');
       onStopAdded();
     } catch (error) {
@@ -68,7 +138,17 @@ function StopEntry({ onStopAdded }) {
     ];
     
     const sample = samples[Math.floor(Math.random() * samples.length)];
-    setFormData(sample);
+    setFormData({
+      ...sample,
+      location: sample.name
+    });
+  };
+
+  const switchInputMode = (mode) => {
+    setInputMode(mode);
+    setMessage('');
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
   };
 
   return (
@@ -77,7 +157,7 @@ function StopEntry({ onStopAdded }) {
         <div className="card-header">
           <div>
             <h2>📍 Add New Stop</h2>
-            <p>Enter delivery stop coordinates manually with precise location data</p>
+            <p>Add delivery stops by searching for locations or entering coordinates manually</p>
           </div>
           <div style={{
             background: 'rgba(102, 126, 234, 0.1)', 
@@ -87,12 +167,39 @@ function StopEntry({ onStopAdded }) {
             minWidth: 'fit-content'
           }}>
             <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#667eea' }}>
-              🎯 Manual Entry
+              {inputMode === 'location' ? '🔍 Location Search' : '🎯 Manual Entry'}
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="stop-form w-full box-border">
+          {/* Input Mode Toggle */}
+          <div className="form-group w-full box-border">
+            <label>Input Method</label>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              marginTop: '0.5rem'
+            }}>
+              <button
+                type="button"
+                className={`btn ${inputMode === 'location' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => switchInputMode('location')}
+                style={{ flex: 1 }}
+              >
+                🔍 Search Location
+              </button>
+              <button
+                type="button"
+                className={`btn ${inputMode === 'coordinates' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => switchInputMode('coordinates')}
+                style={{ flex: 1 }}
+              >
+                🎯 Enter Coordinates
+              </button>
+            </div>
+          </div>
+
           <div className="form-group w-full box-border">
             <label htmlFor="name">
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -114,7 +221,98 @@ function StopEntry({ onStopAdded }) {
             />
           </div>
 
-          <div className="form-row w-full box-border" style={{
+          {inputMode === 'location' && (
+            <div className="form-group w-full box-border">
+              <label htmlFor="location">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🔍 Location Search
+                  <span className="help-text">(City, Address, Landmark)</span>
+                </span>
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  id="location"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  placeholder="e.g., Mumbai, Maharashtra or Times Square, New York"
+                  style={{ 
+                    flex: 1,
+                    background: 'rgba(248, 250, 252, 0.8)',
+                    border: '2px solid #e5e7eb'
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleLocationSearch}
+                  disabled={geocoding || !formData.location.trim()}
+                  style={{ minWidth: '120px' }}
+                >
+                  {geocoding ? (
+                    <>
+                      <span className="spinner"></span>
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      🔍 Search
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {/* Location Suggestions */}
+              {showSuggestions && locationSuggestions.length > 0 && (
+                <div style={{
+                  marginTop: '1rem',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  background: 'white',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  <div style={{
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(102, 126, 234, 0.05)',
+                    borderBottom: '1px solid #e2e8f0',
+                    fontWeight: '600',
+                    fontSize: '0.875rem'
+                  }}>
+                    📍 Select a location:
+                  </div>
+                  {locationSuggestions.map((location, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleLocationSelect(location)}
+                      style={{
+                        padding: '1rem',
+                        borderBottom: index < locationSuggestions.length - 1 ? '1px solid #f1f5f9' : 'none',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(102, 126, 234, 0.05)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
+                        {location.name}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.25rem' }}>
+                        📍 {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                        {location.type} • Confidence: {Math.round(location.confidence * 100)}% • {location.provider}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {inputMode === 'coordinates' && (
+            <div className="form-row w-full box-border" style={{
             display: 'grid',
             gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '1fr 1fr',
             gap: '1.5rem'
@@ -134,7 +332,7 @@ function StopEntry({ onStopAdded }) {
                 onChange={handleChange}
                 placeholder="40.7128"
                 step="any"
-                required
+                required={inputMode === 'coordinates'}
                 style={{ 
                   background: 'rgba(248, 250, 252, 0.8)',
                   border: '2px solid #e5e7eb'
@@ -157,14 +355,33 @@ function StopEntry({ onStopAdded }) {
                 onChange={handleChange}
                 placeholder="-74.0060"
                 step="any"
-                required
+                required={inputMode === 'coordinates'}
                 style={{ 
                   background: 'rgba(248, 250, 252, 0.8)',
                   border: '2px solid #e5e7eb'
                 }}
               />
             </div>
-          </div>
+            </div>
+          )}
+
+          {/* Show coordinates when location is selected */}
+          {inputMode === 'location' && formData.latitude && formData.longitude && (
+            <div className="form-group w-full box-border">
+              <label>📍 Selected Coordinates</label>
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(16, 185, 129, 0.05)',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '8px',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem'
+              }}>
+                <div>Latitude: {formData.latitude}</div>
+                <div>Longitude: {formData.longitude}</div>
+              </div>
+            </div>
+          )}
 
           <div className="form-actions" style={{
             display: 'flex',
@@ -189,16 +406,16 @@ function StopEntry({ onStopAdded }) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={loading}
+              disabled={loading || geocoding}
               style={{ 
                 flex: window.innerWidth <= 768 ? '1 1 100%' : '2',
                 order: window.innerWidth <= 768 ? 1 : 2
               }}
             >
-              {loading ? (
+              {loading || geocoding ? (
                 <>
                   <span className="spinner"></span>
-                  Adding...
+                  {loading ? 'Adding...' : 'Searching...'}
                 </>
               ) : (
                 <>
@@ -218,7 +435,7 @@ function StopEntry({ onStopAdded }) {
       </div>
 
       <div className="info-card w-full box-border">
-        <h3>💡 Location Entry Tips</h3>
+        <h3>💡 Location Entry Guide</h3>
         <div style={{ 
           background: 'rgba(102, 126, 234, 0.05)', 
           padding: '1.5rem', 
@@ -226,6 +443,33 @@ function StopEntry({ onStopAdded }) {
           marginTop: '1rem',
           border: '1px solid rgba(102, 126, 234, 0.1)'
         }}>
+          <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
+            🔍 Location Search (Recommended)
+          </h4>
+          <div style={{ 
+            display: 'grid', 
+            gap: '0.75rem', 
+            marginBottom: '1.5rem',
+            fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Search by city name: "Mumbai", "New York", "London"</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Include state/country: "Mumbai, Maharashtra", "Austin, Texas"</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Search landmarks: "Times Square", "Eiffel Tower"</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#667eea' }}>🔍</span>
+              <span>Multiple results will be shown for selection</span>
+            </div>
+          </div>
+          
           <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
             🎯 Coordinate Format
           </h4>
@@ -248,7 +492,7 @@ function StopEntry({ onStopAdded }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ color: '#667eea' }}>🔍</span>
-              <span>Use Google Maps to find precise coordinates</span>
+              <span>Manual entry available if location search fails</span>
             </div>
           </div>
         </div>
@@ -256,9 +500,10 @@ function StopEntry({ onStopAdded }) {
           fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
           lineHeight: '1.5'
         }}>
-          <li>Right-click on Google Maps to get coordinates</li>
-          <li>Ensure accuracy for optimal route calculation</li>
-          <li>Double-check coordinates before adding</li>
+          <li>Location search uses multiple geocoding providers for accuracy</li>
+          <li>Results show confidence scores to help you choose the best match</li>
+          <li>Coordinates are automatically filled when you select a location</li>
+          <li>Switch to manual entry if location search doesn't find your place</li>
           <li>Use the sample data button for quick testing</li>
         </ul>
       </div>
