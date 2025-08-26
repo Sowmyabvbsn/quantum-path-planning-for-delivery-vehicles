@@ -332,24 +332,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   </div>
                 )}
 
-                <div className="param-group w-full box-border">
-                  <label>Starting Stop</label>
-                  <select
-                    value={optimizationParams.start_index}
-                    onChange={(e) => handleParamChange('start_index', parseInt(e.target.value))}
-                    disabled={loading}
-                    style={{ touchAction: 'manipulation' }}
-                  >
-                    {selectedStopData.map((stop, index) => (
-                      <option key={stop.id} value={index}>
-                        {index + 1}. {stop.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              
-
-              <div className="param-group">
+              <div className="param-group w-full box-border">
                 <label>Quantum Backend</label>
                 <select
                   value={optimizationParams.quantum_backend}
@@ -371,9 +354,9 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   disabled={loading}
                   style={{ touchAction: 'manipulation' }}
                 >
-                  <option value={1}>Level 1 - Fast (Classical only)</option>
-                  <option value={2}>Level 2 - Balanced (Hybrid)</option>
-                  <option value={3}>Level 3 - Thorough (Full Hybrid)</option>
+                  <option value={1}>Level 1 - Quantum QAOA + Basic Classical</option>
+                  <option value={2}>Level 2 - Quantum QAOA + Advanced Classical</option>
+                  <option value={3}>Level 3 - Multi-Parameter QAOA + Full Classical Suite</option>
                 </select>
               </div>
               </div>
@@ -394,7 +377,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
               alignItems: 'center',
               marginBottom: '1rem'
             }}>
-              <h3>🔬 Hybrid Quantum-Classical Computing</h3>
+              <h3>🔬 Quantum Layer → Classical Post-Processing</h3>
               <span className="progress-percent">{progress}%</span>
             </div>
             <div className="progress-bar" style={{
@@ -454,12 +437,12 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
             {loading ? (
               <>
                 <span className="spinner"></span>
-                Hybrid Computing...
+                Quantum → Classical Processing...
               </>
             ) : (
               <>
                 <span>⚛️</span>
-                Start Hybrid Optimization
+                Start Quantum-Classical Optimization
               </>
             )}
           </button>
@@ -468,21 +451,21 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
       <div className="algorithm-info w-full box-border">
         <div className="info-card">
-          <h3>🧮 Hybrid Quantum-Classical Optimization</h3>
+          <h3>🧮 Layered Quantum-Classical Architecture</h3>
           <p>
-            Our hybrid approach combines quantum QAOA with classical algorithms including 
-            simulated annealing, genetic algorithms, and ant colony optimization for 
-            superior route optimization accuracy.
+            Following the interaction diagram, our system uses a layered architecture where 
+            quantum QAOA generates candidate routes, which are then refined by classical 
+            post-processing algorithms for optimal results.
           </p>
           <ul>
-            <li>✨ Quantum superposition for parallel exploration</li>
-            <li>🔗 Entanglement for correlated decision making</li>
-            <li>🧬 Genetic algorithms for population-based search</li>
-            <li>🐜 Ant colony optimization for pheromone-based routing</li>
-            <li>🔥 Simulated annealing for local optimization</li>
+            <li>⚛️ Quantum Layer: QAOA circuit execution for candidate generation</li>
+            <li>🔬 Classical Layer: Heuristic post-processing and refinement</li>
+            <li>🔄 2-opt and simulated annealing for local optimization</li>
+            <li>🎯 Nearest neighbor improvements for route quality</li>
             <li>📏 Haversine formula for accurate distance calculations</li>
             <li>📍 Current location integration</li>
-            <li>🚧 Real-time obstacle avoidance</li>
+            <li>🗺️ Map tiles loaded once, route overlay added dynamically</li>
+            <li>🚧 Real-time obstacle data integration</li>
           </ul>
         </div>
       </div>

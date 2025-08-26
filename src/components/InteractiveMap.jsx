@@ -95,6 +95,7 @@ function InteractiveMap({
   const [mapReady, setMapReady] = useState(false);
   const [userLocation, setUserLocation] = useState(currentLocation);
   const [loadingObstacles, setLoadingObstacles] = useState(false);
+  const [mapTilesLoaded, setMapTilesLoaded] = useState(false);
 
   // Get user's current location
   useEffect(() => {
@@ -230,8 +231,8 @@ function InteractiveMap({
         maxBoundsViscosity: 0.8
       });
 
-      // Add responsive tile layer with retina support
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      // Add responsive tile layer with retina support - Initialize map tiles only once
+      const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
         tileSize: 256,
@@ -241,7 +242,14 @@ function InteractiveMap({
         updateWhenIdle: true,
         updateWhenZooming: false,
         keepBuffer: 2
-      }).addTo(map);
+      });
+      
+      // Add tile layer load event listener
+      tileLayer.on('load', () => {
+        setMapTilesLoaded(true);
+      });
+      
+      tileLayer.addTo(map);
 
       mapInstanceRef.current = map;
       setMapReady(true);
@@ -291,6 +299,7 @@ function InteractiveMap({
           mapInstanceRef.current.remove();
           mapInstanceRef.current = null;
           setMapReady(false);
+          setMapTilesLoaded(false);
         } catch (error) {
           console.error('Error cleaning up map:', error);
         }
@@ -695,6 +704,36 @@ function InteractiveMap({
   return (
     <div style={containerStyle}>
       <div ref={mapRef} style={{ height: '100%', width: '100%' }} />
+      
+      {/* Map tiles loading indicator */}
+      {!mapTilesLoaded && mapReady && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(255, 255, 255, 0.9)',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          fontSize: '0.875rem',
+          color: '#667eea',
+          fontWeight: '500',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <div style={{
+            width: '16px',
+            height: '16px',
+            border: '2px solid #667eea',
+            borderTop: '2px solid transparent',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          Loading map tiles...
+        </div>
+      )}
       
       {/* Loading obstacles indicator */}
       {loadingObstacles && (

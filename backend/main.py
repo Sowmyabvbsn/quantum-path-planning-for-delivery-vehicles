@@ -12,7 +12,8 @@ from contextlib import asynccontextmanager
 
 from models import Stop, OptimizationRequest, OptimizationResponse, RouteResult
 from database import init_db, get_db_connection
-from quantum_optimizer import QuantumPathOptimizer
+from quantum_layer import QuantumLayer
+from classical_optimizer import ClassicalOptimizer
 from utils import calculate_distance_matrix
 
 # Configure logging
@@ -42,8 +43,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize quantum optimizer
-quantum_optimizer = QuantumPathOptimizer()
+# Initialize quantum and classical layers
+quantum_layer = QuantumLayer()
+classical_optimizer = ClassicalOptimizer()
 
 @app.get("/")
 async def root():
@@ -164,7 +166,7 @@ async def delete_stop(stop_id: int):
 
 @app.post("/api/optimize", response_model=OptimizationResponse)
 async def optimize_route(request: OptimizationRequest):
-    """Optimize route using quantum QAOA algorithm"""
+    """Optimize route using hybrid quantum-classical approach"""
     try:
         if len(request.stop_ids) < 2:
             raise HTTPException(status_code=400, detail="At least 2 stops required for optimization")
@@ -194,31 +196,60 @@ async def optimize_route(request: OptimizationRequest):
         coordinates = [(stop['latitude'], stop['longitude']) for stop in stops_data]
         distance_matrix = calculate_distance_matrix(coordinates)
         
-        # Optimize using quantum QAOA
-        logger.info("Starting quantum optimization...")
-        optimization_result = await quantum_optimizer.optimize_route(
-            distance_matrix, 
-            request.start_index or 0
+        # Step 1: Run quantum optimization (QAOA)
+        logger.info("Starting quantum layer optimization...")
+        quantum_result = await quantum_layer.run_qaoa_circuit(distance_matrix)
+        
+        # Step 2: Classical post-processing
+        logger.info("Starting classical post-processing...")
+        if quantum_result['success']:
+            # Use quantum candidate routes for classical optimization
+            candidate_routes = [quantum_result['route']]
+        else:
+            # Fallback to pure classical if quantum fails
+            candidate_routes = []
+        
+        classical_result = classical_optimizer.heuristic_optimization(
+            candidate_routes, distance_matrix
         )
         
+        # Combine results
+        total_computation_time = quantum_result.get('computation_time', 0) + classical_result['computation_time']
+        
+        # Apply start index offset
+        start_index = request.start_index or 0
+        if start_index > 0 and start_index < len(classical_result['route']):
+            route = classical_result['route']
+            # Rotate route to start from specified index
+            start_pos = route.index(start_index) if start_index in route else 0
+            optimized_route = route[start_pos:] + route[:start_pos]
+        else:
+            optimized_route = classical_result['route']
+        
         # Prepare response
-        optimized_stops = [stops_data[i] for i in optimization_result['route']]
+        optimized_stops = [stops_data[i] for i in optimized_route]
         
         # Calculate total distance
         total_distance = 0
-        for i in range(len(optimization_result['route']) - 1):
-            from_idx = optimization_result['route'][i]
-            to_idx = optimization_result['route'][i + 1]
+        for i in range(len(optimized_route) - 1):
+            from_idx = optimized_route[i]
+            to_idx = optimized_route[i + 1]
             total_distance += distance_matrix[from_idx][to_idx]
+        
+        # Determine backend description
+        if quantum_result['success']:
+            backend_desc = f"Hybrid (Quantum QAOA + {classical_result['method']})"
+        else:
+            backend_desc = f"Classical Fallback ({classical_result['method']})"
         
         return OptimizationResponse(
             success=True,
-            route=optimization_result['route'],
+            route=optimized_route,
             stops=optimized_stops,
             total_distance=round(total_distance, 2),
-            computation_time=optimization_result['computation_time'],
-            quantum_backend=optimization_result['backend'],
-            optimization_level=optimization_result.get('optimization_level', 0)
+            computation_time=total_computation_time,
+            quantum_backend=backend_desc,
+            optimization_level=request.optimization_level or 1
         )
         
     except HTTPException:
