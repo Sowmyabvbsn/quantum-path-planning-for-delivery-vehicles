@@ -61,18 +61,19 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
     setLoading(true);
     setProgress(0);
-    setCurrentStep('Initializing quantum optimization...');
+    setCurrentStep('Store/Fetch stops & route data...');
     setMessage('');
 
     try {
       // Simulate progress updates
       const progressSteps = [
-        { progress: 10, step: 'Calculating distance matrix using Haversine formula...' },
-        { progress: 25, step: 'Preparing quantum circuit...' },
-        { progress: 40, step: 'Executing QAOA algorithm...' },
-        { progress: 65, step: 'Running quantum optimization...' },
-        { progress: 80, step: 'Decoding quantum results...' },
-        { progress: 95, step: 'Finalizing optimal route...' }
+        { progress: 15, step: 'Calculate Distance Matrix (Haversine)...' },
+        { progress: 30, step: 'Send distance matrix to Quantum Layer...' },
+        { progress: 50, step: 'Run QAOA Circuit...' },
+        { progress: 65, step: 'Generate candidate routes...' },
+        { progress: 80, step: 'Forward candidate routes to Classical Post-Processing...' },
+        { progress: 90, step: 'Heuristic optimization...' },
+        { progress: 95, step: 'Return optimized route...' }
       ];
 
       for (const { progress: prog, step } of progressSteps) {
@@ -109,7 +110,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       }
 
       setProgress(100);
-      setCurrentStep('Hybrid quantum-classical optimization complete!');
+      setCurrentStep('Optimization complete! Route ready for visualization.');
       
       setTimeout(() => {
         onOptimizationComplete(result);

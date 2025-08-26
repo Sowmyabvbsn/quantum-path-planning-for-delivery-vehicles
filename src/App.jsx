@@ -5,6 +5,7 @@ import ImageOCRUpload from './components/ImageOCRUpload';
 import RouteDisplay from './components/RouteDisplay';
 import StopsList from './components/StopsList';
 import QuantumDashboard from './components/QuantumDashboard';
+import MapboxSetup from './components/MapboxSetup';
 import { getAllStops, deleteStop } from './services/api';
 import './App.css';
 
@@ -78,7 +79,8 @@ function App() {
     { id: 'ocr', label: 'OCR Upload', icon: '📷' },
     { id: 'manage', label: 'Manage Stops', icon: '🗂️' },
     { id: 'optimize', label: 'Quantum Optimization', icon: '🚀' },
-    { id: 'results', label: 'Results', icon: '📊' }
+    { id: 'results', label: 'Results', icon: '📊' },
+    { id: 'maps', label: 'Map Setup', icon: '🗺️' }
   ];
 
   return (
@@ -167,6 +169,12 @@ function App() {
                 route={optimizedRoute}
                 stops={stops}
               />
+            </div>
+          )}
+
+          {activeTab === 'maps' && (
+            <div className="tab-content">
+              <MapboxSetup />
             </div>
           )}
         </div>

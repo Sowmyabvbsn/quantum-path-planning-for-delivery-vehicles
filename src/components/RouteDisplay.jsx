@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import InteractiveMap from './InteractiveMap';
+import RouteVisualization from './RouteVisualization';
 
 function RouteDisplay({ route, stops }) {
   const [showDetails, setShowDetails] = useState(true);
   const [showAnimation, setShowAnimation] = useState(false);
   const [selectedStop, setSelectedStop] = useState(null);
+  const [enhancedRoute, setEnhancedRoute] = useState(route);
 
   console.log('RouteDisplay - route:', route);
   console.log('RouteDisplay - stops:', stops);
@@ -96,16 +98,28 @@ function RouteDisplay({ route, stops }) {
 
   // Create route data structure for the map
   const mapRouteData = {
-    route: routeStops.map(stop => stop.id),
+    route: enhancedRoute?.route || route.route,
     stops: routeStops,
-    total_distance: route.total_distance,
+    total_distance: enhancedRoute?.actualDistance || route.total_distance,
     computation_time: route.computation_time,
     quantum_backend: route.quantum_backend,
-    optimization_level: route.optimization_level
+    optimization_level: route.optimization_level,
+    geometry: enhancedRoute?.geometry
+  };
+
+  const handleRouteUpdate = (updatedRoute) => {
+    setEnhancedRoute(updatedRoute);
   };
 
   return (
     <div className="route-display w-full box-border">
+      {/* Route Visualization Component - handles route overlay generation */}
+      <RouteVisualization 
+        route={route}
+        stops={stops}
+        onRouteUpdate={handleRouteUpdate}
+      />
+      
       <div className="card">
         <div className="card-header">
           <div>
@@ -130,7 +144,7 @@ function RouteDisplay({ route, stops }) {
               <div className="stat-label">Stops</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{formatDistance(route.total_distance || 0)}</div>
+              <div className="stat-value">{formatDistance(enhancedRoute?.actualDistance || route.total_distance || 0)}</div>
               <div className="stat-label">Total Distance</div>
             </div>
             <div className="stat-card">
@@ -348,6 +362,7 @@ function RouteDisplay({ route, stops }) {
               const routeData = {
                 stops: routeStops,
                 totalDistance: route.total_distance,
+                estimatedDuration: enhancedRoute?.estimatedDuration,
                 optimizationTime: route.computation_time,
                 backend: route.quantum_backend
               };

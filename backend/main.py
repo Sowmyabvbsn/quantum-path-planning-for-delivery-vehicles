@@ -166,12 +166,21 @@ async def delete_stop(stop_id: int):
 
 @app.post("/api/optimize", response_model=OptimizationResponse)
 async def optimize_route(request: OptimizationRequest):
-    """Optimize route using hybrid quantum-classical approach"""
+    """
+    Optimize route using hybrid quantum-classical approach
+    Following the interaction diagram:
+    1. Store/Fetch stops & route data
+    2. Calculate Distance Matrix (Haversine)
+    3. Send distance matrix to Quantum Layer
+    4. Run QAOA Circuit
+    5. Forward candidate routes to Classical Post-Processing
+    6. Return optimized route
+    """
     try:
         if len(request.stop_ids) < 2:
             raise HTTPException(status_code=400, detail="At least 2 stops required for optimization")
         
-        # Fetch stops from database
+        # Step 1: Store/Fetch stops & route data
         connection = get_db_connection()
         cursor = connection.cursor()
         
@@ -192,15 +201,15 @@ async def optimize_route(request: OptimizationRequest):
         if len(stops_data) != len(request.stop_ids):
             raise HTTPException(status_code=400, detail="Some stops not found")
         
-        # Calculate distance matrix
+        # Step 2: Calculate Distance Matrix (Haversine)
         coordinates = [(stop['latitude'], stop['longitude']) for stop in stops_data]
         distance_matrix = calculate_distance_matrix(coordinates)
         
-        # Step 1: Run quantum optimization (QAOA)
+        # Step 3 & 4: Send distance matrix to Quantum Layer → Run QAOA Circuit
         logger.info("Starting quantum layer optimization...")
         quantum_result = await quantum_layer.run_qaoa_circuit(distance_matrix)
         
-        # Step 2: Classical post-processing
+        # Step 5: Forward candidate routes to Classical Post-Processing
         logger.info("Starting classical post-processing...")
         if quantum_result['success']:
             # Use quantum candidate routes for classical optimization
@@ -213,6 +222,7 @@ async def optimize_route(request: OptimizationRequest):
             candidate_routes, distance_matrix
         )
         
+        # Step 6: Return optimized route
         # Combine results
         total_computation_time = quantum_result.get('computation_time', 0) + classical_result['computation_time']
         
@@ -241,6 +251,30 @@ async def optimize_route(request: OptimizationRequest):
             backend_desc = f"Hybrid (Quantum QAOA + {classical_result['method']})"
         else:
             backend_desc = f"Classical Fallback ({classical_result['method']})"
+        
+        # Store optimization result in database for history
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+            
+            cursor.execute("""
+                INSERT INTO optimization_results 
+                (route_data, total_distance, computation_time, backend_used, optimization_level, stop_count)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                str(optimized_route),
+                total_distance,
+                total_computation_time,
+                backend_desc,
+                request.optimization_level or 1,
+                len(optimized_stops)
+            ))
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+        except Exception as e:
+            logger.warning(f"Failed to store optimization result: {str(e)}")
         
         return OptimizationResponse(
             success=True,

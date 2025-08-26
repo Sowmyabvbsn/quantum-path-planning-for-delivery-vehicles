@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapLegend from './MapLegend';
+import mapService from '../services/mapService';
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -96,6 +97,11 @@ function InteractiveMap({
   const [userLocation, setUserLocation] = useState(currentLocation);
   const [loadingObstacles, setLoadingObstacles] = useState(false);
   const [mapTilesLoaded, setMapTilesLoaded] = useState(false);
+
+  // Initialize map service only once as per interaction diagram
+  useEffect(() => {
+    mapService.initialize();
+  }, []);
 
   // Get user's current location
   useEffect(() => {
@@ -231,9 +237,9 @@ function InteractiveMap({
         maxBoundsViscosity: 0.8
       });
 
-      // Add responsive tile layer with retina support - Initialize map tiles only once
-      const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      // Initialize map & request tiles (only once) as per interaction diagram
+      const tileLayer = L.tileLayer(mapService.getTileUrl(), {
+        attribution: mapService.getAttribution(),
         maxZoom: 19,
         tileSize: 256,
         zoomOffset: 0,
