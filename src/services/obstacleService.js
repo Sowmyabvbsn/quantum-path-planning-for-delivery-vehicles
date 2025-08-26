@@ -1,27 +1,21 @@
 import axios from 'axios';
 import process from 'process'
 window.process=process
-// Free API services for real-time obstacle detection
 const OBSTACLE_SERVICES = {
-  // OpenWeatherMap - Free tier: 1000 calls/day
   WEATHER: {
     baseUrl: 'https://api.openweathermap.org/data/2.5',
     apiKey: process.env.REACT_APP_OPENWEATHER_API_KEY || 'demo_key'
   },
   
-  // HERE Traffic API - Free tier: 250k transactions/month
   TRAFFIC: {
     baseUrl: 'https://traffic.ls.hereapi.com/traffic/6.3',
     apiKey: process.env.REACT_APP_HERE_API_KEY || 'demo_key'
   },
   
-  // MapBox Traffic API - Free tier: 50k requests/month
   MAPBOX: {
     baseUrl: 'https://api.mapbox.com/traffic/v1',
     apiKey: process.env.REACT_APP_MAPBOX_API_KEY || 'demo_key'
   },
-  
-  // TomTom Traffic API - Free tier: 2500 requests/day
   TOMTOM: {
     baseUrl: 'https://api.tomtom.com/traffic/services/4',
     apiKey: process.env.REACT_APP_TOMTOM_API_KEY || 'demo_key'
@@ -31,12 +25,10 @@ const OBSTACLE_SERVICES = {
 class ObstacleDetectionService {
   constructor() {
     this.cache = new Map();
-    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes cache
+    this.cacheTimeout = 5 * 60 * 1000; 
     this.requestQueue = [];
     this.isProcessing = false;
   }
-
-  // Main method to get all obstacles for a route
   async getRouteObstacles(coordinates, options = {}) {
     try {
       const obstacles = await Promise.allSettled([
@@ -59,12 +51,11 @@ class ObstacleDetectionService {
     }
   }
 
-  // Weather-based obstacles using OpenWeatherMap
   async getWeatherObstacles(coordinates) {
     const obstacles = [];
     
     try {
-      for (const coord of coordinates.slice(0, 5)) { // Limit to 5 points to stay within free tier
+      for (const coord of coordinates.slice(0, 5)) { 
         const cacheKey = `weather_${coord[0]}_${coord[1]}`;
         
         if (this.isCached(cacheKey)) {
