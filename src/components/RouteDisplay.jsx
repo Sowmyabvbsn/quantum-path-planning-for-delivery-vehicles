@@ -1,12 +1,24 @@
 import React, { useState } from 'react';
 import InteractiveMap from './InteractiveMap';
-import RouteVisualization from './RouteVisualization';
+import useRouteVisualization from './RouteVisualization';
 
 function RouteDisplay({ route, stops }) {
   const [showDetails, setShowDetails] = useState(true);
   const [showAnimation, setShowAnimation] = useState(false);
   const [selectedStop, setSelectedStop] = useState(null);
   const [enhancedRoute, setEnhancedRoute] = useState(route);
+
+  // Define handleRouteUpdate before using it in the hook
+  const handleRouteUpdate = (updatedRoute) => {
+    setEnhancedRoute(updatedRoute);
+  };
+
+  // Use the route visualization hook
+  const { routeGeometry, loading: routeLoading, error: routeError, regenerateRoute } = useRouteVisualization(
+    route, 
+    stops, 
+    handleRouteUpdate
+  );
 
   console.log('RouteDisplay - route:', route);
   console.log('RouteDisplay - stops:', stops);
@@ -107,19 +119,8 @@ function RouteDisplay({ route, stops }) {
     geometry: enhancedRoute?.geometry
   };
 
-  const handleRouteUpdate = (updatedRoute) => {
-    setEnhancedRoute(updatedRoute);
-  };
-
   return (
     <div className="route-display w-full box-border">
-      {/* Route Visualization Component - handles route overlay generation */}
-      <RouteVisualization 
-        route={route}
-        stops={stops}
-        onRouteUpdate={handleRouteUpdate}
-      />
-      
       <div className="card">
         <div className="card-header">
           <div>
@@ -137,6 +138,19 @@ function RouteDisplay({ route, stops }) {
           </div>
         </div>
 
+        {routeError && (
+          <div className="message error" style={{ margin: '1rem 2rem' }}>
+            Route visualization error: {routeError}
+            <button 
+              className="btn btn-secondary btn-sm" 
+              onClick={regenerateRoute}
+              style={{ marginLeft: '1rem' }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="route-summary w-full box-border">
           <div className="summary-stats w-full box-border">
             <div className="stat-card">
@@ -144,7 +158,7 @@ function RouteDisplay({ route, stops }) {
               <div className="stat-label">Stops</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{formatDistance(enhancedRoute?.actualDistance || route.total_distance || 0)}</div>
+              <div className="stat-value">{formatDistance(routeGeometry?.distance || enhancedRoute?.actualDistance || route.total_distance || 0)}</div>
               <div className="stat-label">Total Distance</div>
             </div>
             <div className="stat-card">
@@ -155,6 +169,12 @@ function RouteDisplay({ route, stops }) {
               <div className="stat-value">{route.quantum_backend || 'Unknown'}</div>
               <div className="stat-label">Backend</div>
             </div>
+            {routeGeometry?.duration && (
+              <div className="stat-card">
+                <div className="stat-value">{Math.round(routeGeometry.duration)} min</div>
+                <div className="stat-label">Est. Duration</div>
+              </div>
+            )}
           </div>
         </div>
 

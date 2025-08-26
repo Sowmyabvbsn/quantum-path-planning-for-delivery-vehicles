@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import mapService from '../services/mapService';
 
-function RouteVisualization({ route, stops, onRouteUpdate }) {
+// Custom hook for route visualization logic
+function useRouteVisualization(route, stops, onRouteUpdate) {
   const [routeGeometry, setRouteGeometry] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -110,4 +111,4 @@ function RouteVisualization({ route, stops, onRouteUpdate }) {
   };
 }
 
-export default RouteVisualization;
+export default useRouteVisualization;
