@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import Tesseract from 'tesseract.js';
 import { addStop } from '../services/api';
+import geocodingService from '../services/geocodingService';
 
 function ImageOCRUpload({ onStopsUploaded }) {
   const [image, setImage] = useState(null);
@@ -106,7 +107,7 @@ function ImageOCRUpload({ onStopsUploaded }) {
           // Perform OCR with optimized settings
           const { data: { text } } = await Tesseract.recognize(
             processedImageData,
-            'eng',
+            'eng+hin', // Support both English and Hindi for better Indian location recognition
             {
               logger: m => {
                 if (m.status === 'recognizing text') {
@@ -115,8 +116,10 @@ function ImageOCRUpload({ onStopsUploaded }) {
                   setCurrentStep(`Recognizing text... ${Math.round(m.progress * 100)}%`);
                 }
               },
-              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,- ()',
-              tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+              // Removed character whitelist to allow better handwritten text recognition
+              tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD, // Better for mixed content
+              tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY, // Better for handwritten text
+              preserve_interword_spaces: '1',
             }
           );
 
@@ -124,20 +127,20 @@ function ImageOCRUpload({ onStopsUploaded }) {
           setOcrProgress(80);
 
           // Process the extracted text
-          const processedData = processExtractedText(text);
+          const processedData = await processExtractedText(text);
           
           setCurrentStep('Validating location data...');
           setOcrProgress(90);
 
-          // Validate and enrich the data
-          const validatedData = await validateAndEnrichData(processedData);
+          // Filter out invalid entries
+          const validatedData = processedData.filter(item => item.latitude && item.longitude);
           
           setExtractedData(validatedData);
           setOcrProgress(100);
           setCurrentStep('OCR processing complete!');
           
           if (validatedData.length === 0) {
-            setMessage('No valid location data found in the image. Please ensure the image contains district names with coordinates.');
+            setMessage('No valid location data found in the image. Please ensure the image contains clear location names.');
           } else {
             setMessage(`Successfully extracted ${validatedData.length} location entries from the image.`);
           }
@@ -165,27 +168,162 @@ function ImageOCRUpload({ onStopsUploaded }) {
     }
   };
 
-  const processExtractedText = (text) => {
+  const processExtractedText = async (text) => {
     const lines = text.split('\n').filter(line => line.trim().length > 0);
     const locationData = [];
     
-    // Patterns to match different data formats
+    setCurrentStep('Processing extracted locations with geocoding...');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const cleanLine = line.trim();
+      
+      if (cleanLine.length < 3) continue; // Skip very short lines
+      
+      // Update progress for geocoding
+      const geocodingProgress = Math.round((i / lines.length) * 20) + 80;
+      setOcrProgress(geocodingProgress);
+      setCurrentStep(`Geocoding location ${i + 1} of ${lines.length}: ${cleanLine.substring(0, 30)}...`);
+      
+      try {
+        // First, try to extract coordinates if they exist in the line
+        const coordinateMatch = cleanLine.match(/(-?\d{1,3}\.\d{4,})\s*,?\s*(-?\d{1,3}\.\d{4,})/);
+        
+        if (coordinateMatch) {
+          // Line contains coordinates - extract location name and coordinates
+          const [, lat, lng] = coordinateMatch;
+          const latitude = parseFloat(lat);
+          const longitude = parseFloat(lng);
+          
+          if (isValidCoordinate(latitude, longitude)) {
+            // Extract location name (everything before coordinates)
+            const locationName = cleanLine.replace(/(-?\d{1,3}\.\d{4,})\s*,?\s*(-?\d{1,3}\.\d{4,}).*/, '').trim();
+            const cleanLocationName = locationName.replace(/[,\s]+$/, '').trim();
+            
+            if (cleanLocationName.length > 0) {
+              locationData.push({
+                name: cleanLocationName,
+                latitude: latitude,
+                longitude: longitude,
+                source: 'OCR_with_coordinates',
+                confidence: 0.9,
+                originalText: cleanLine
+              });
+            }
+          }
+        } else {
+          // Line doesn't contain coordinates - treat as location name and geocode
+          const locationName = cleanLocationName(cleanLine);
+          
+          if (locationName.length > 2) {
+            try {
+              // Use geocoding service to get coordinates
+              const geocodeResults = await geocodingService.geocodeLocation(locationName, {
+                limit: 1,
+                countryCode: 'in' // Bias towards India for better results
+              });
+              
+              if (geocodeResults && geocodeResults.length > 0) {
+                const result = geocodeResults[0];
+                locationData.push({
+                  name: result.name || locationName,
+                  latitude: result.latitude,
+                  longitude: result.longitude,
+                  source: 'OCR_geocoded',
+                  confidence: result.confidence || 0.7,
+                  originalText: cleanLine,
+                  geocodingProvider: result.provider
+                });
+              }
+            } catch (geocodeError) {
+              console.warn(`Geocoding failed for "${locationName}":`, geocodeError.message);
+              // Still add the location without coordinates for manual review
+              locationData.push({
+                name: locationName,
+                latitude: null,
+                longitude: null,
+                source: 'OCR_failed_geocoding',
+                confidence: 0.3,
+                originalText: cleanLine,
+                error: geocodeError.message
+              });
+            }
+          }
+        }
+        
+        // Small delay to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (error) {
+        console.warn(`Error processing line "${cleanLine}":`, error);
+      }
+    }
+
+    return locationData;
+  };
+
+  const cleanLocationName = (text) => {
+    // Clean up common OCR artifacts and improve location name extraction
+    let cleaned = text
+      .replace(/[^\w\s,.-]/g, ' ') // Remove special characters except common ones
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/\b\d+\b/g, '') // Remove standalone numbers
+      .replace(/[,.-]+$/, '') // Remove trailing punctuation
+      .trim();
+    
+    // Handle common OCR misreads
+    const corrections = {
+      '0': 'O', '1': 'I', '5': 'S', '8': 'B',
+      'rn': 'm', 'vv': 'w', 'ii': 'n'
+    };
+    
+    Object.entries(corrections).forEach(([wrong, right]) => {
+      const regex = new RegExp(wrong, 'gi');
+      cleaned = cleaned.replace(regex, right);
+    });
+    
+    return cleaned;
+  };
+
+  // Enhanced patterns for better location extraction
+  const extractLocationFromLine = (line) => {
     const patterns = [
       // Pattern 1: District, State, Lat, Lng (comma separated)
       /^([^,]+),\s*([^,]+),\s*(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/,
       // Pattern 2: District State Lat Lng (space separated)
       /^([A-Za-z\s]+)\s+([A-Za-z\s]+)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)$/,
-      // Pattern 3: More flexible pattern with coordinates
-      /([A-Za-z\s]+).*?(-?\d{1,3}\.\d{4,})\s*,?\s*(-?\d{1,3}\.\d{4,})/
+      // Pattern 3: Just location names (comma or line separated)
+      /^([A-Za-z\s,.-]+)$/,
+      // Pattern 4: Location with some numbers but not coordinates
+      /^([A-Za-z\s,.-]+)\s*\d{1,6}\s*$/
     ];
+      
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  };
 
+  // Keep the old pattern matching as fallback
+  const processExtractedTextFallback = (text) => {
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    const locationData = [];
+    
     for (const line of lines) {
       const cleanLine = line.trim();
+      const patterns = [
+        /^([^,]+),\s*([^,]+),\s*(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/,
+        /^([A-Za-z\s]+)\s+([A-Za-z\s]+)\s+(-?\d+\.?\d*)\s+(-?\d+\.?\d*)$/,
+        /([A-Za-z\s]+).*?(-?\d{1,3}\.\d{4,})\s*,?\s*(-?\d{1,3}\.\d{4,})/
+      ];
       
       for (const pattern of patterns) {
         const match = cleanLine.match(pattern);
         if (match) {
-          const [, district, state, lat, lng] = match;
+          const [, name, state, lat, lng] = match;
           
           // Validate coordinates
           const latitude = parseFloat(lat);
@@ -193,19 +331,18 @@ function ImageOCRUpload({ onStopsUploaded }) {
           
           if (isValidCoordinate(latitude, longitude)) {
             locationData.push({
-              district: district.trim(),
-              stateName: state ? state.trim() : 'Unknown',
+              name: `${name.trim()}${state ? ', ' + state.trim() : ''}`,
               latitude: latitude,
               longitude: longitude,
-              source: 'OCR',
-              confidence: calculateConfidence(cleanLine)
+              source: 'OCR_pattern_match',
+              confidence: calculateConfidence(cleanLine),
+              originalText: cleanLine
             });
             break; // Found a match, move to next line
           }
         }
       }
     }
-
     return locationData;
   };
 
@@ -227,30 +364,20 @@ function ImageOCRUpload({ onStopsUploaded }) {
     return Math.min(confidence, 1.0);
   };
 
-  const validateAndEnrichData = async (data) => {
-    // Remove duplicates and sort by confidence
-    const uniqueData = data.filter((item, index, self) => 
-      index === self.findIndex(t => 
-        t.district === item.district && 
-        Math.abs(t.latitude - item.latitude) < 0.001 &&
-        Math.abs(t.longitude - item.longitude) < 0.001
-      )
-    ).sort((a, b) => b.confidence - a.confidence);
-
-    // Validate against known Indian coordinates (if applicable)
-    return uniqueData.filter(item => {
-      // Basic validation for Indian subcontinent coordinates
-      const isInIndia = item.latitude >= 6 && item.latitude <= 37 && 
-                       item.longitude >= 68 && item.longitude <= 97;
-      
-      return isInIndia || (Math.abs(item.latitude) > 0 && Math.abs(item.longitude) > 0);
-    });
-  };
-
   const addSingleStop = async (stopData, index) => {
+    // Skip entries without coordinates
+    if (!stopData.latitude || !stopData.longitude) {
+      setProcessedStops(prev => [...prev, { 
+        ...stopData, 
+        status: 'skipped', 
+        error: 'No coordinates available' 
+      }]);
+      return { success: false, error: 'No coordinates available' };
+    }
+
     try {
       const result = await addStop({
-        name: `${stopData.district}, ${stopData.stateName}`,
+        name: stopData.name,
         latitude: stopData.latitude,
         longitude: stopData.longitude
       });
@@ -276,10 +403,18 @@ function ImageOCRUpload({ onStopsUploaded }) {
     let successCount = 0;
     let errorCount = 0;
 
-    for (let i = 0; i < extractedData.length; i++) {
-      const stopData = extractedData[i];
-      setCurrentStep(`Adding stop ${i + 1} of ${extractedData.length}: ${stopData.district}`);
-      setOcrProgress(Math.round((i / extractedData.length) * 100));
+    // Filter out entries without coordinates
+    const validEntries = extractedData.filter(item => item.latitude && item.longitude);
+    const invalidEntries = extractedData.filter(item => !item.latitude || !item.longitude);
+
+    if (invalidEntries.length > 0) {
+      setMessage(`Skipping ${invalidEntries.length} entries without coordinates. Processing ${validEntries.length} valid entries.`);
+    }
+
+    for (let i = 0; i < validEntries.length; i++) {
+      const stopData = validEntries[i];
+      setCurrentStep(`Adding stop ${i + 1} of ${validEntries.length}: ${stopData.name}`);
+      setOcrProgress(Math.round((i / validEntries.length) * 100));
       
       const result = await addSingleStop(stopData, i);
       if (result.success) {
@@ -292,9 +427,15 @@ function ImageOCRUpload({ onStopsUploaded }) {
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
+    // Mark invalid entries as skipped
+    invalidEntries.forEach(item => {
+      setProcessedStops(prev => [...prev, { ...item, status: 'skipped', error: 'No coordinates' }]);
+    });
+
     setOcrProgress(100);
     setCurrentStep('All stops processed!');
-    setMessage(`Processing complete: ${successCount} stops added successfully, ${errorCount} failed.`);
+    const skippedCount = invalidEntries.length;
+    setMessage(`Processing complete: ${successCount} stops added successfully, ${errorCount} failed, ${skippedCount} skipped (no coordinates).`);
     
     if (successCount > 0) {
       onStopsUploaded();
@@ -313,9 +454,9 @@ function ImageOCRUpload({ onStopsUploaded }) {
     setExtractedData([]);
     setProcessedStops([]);
     setMessage('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    // Reset file input
+    const fileInput = document.getElementById('image-file-input');
+    if (fileInput) fileInput.value = '';
   };
 
   const downloadSampleImage = () => {
@@ -340,11 +481,14 @@ function ImageOCRUpload({ onStopsUploaded }) {
     
     // Sample data
     const sampleData = [
-      'Mumbai, Maharashtra, 19.0760, 72.8777',
-      'Delhi, Delhi, 28.7041, 77.1025',
-      'Bangalore, Karnataka, 12.9716, 77.5946',
-      'Chennai, Tamil Nadu, 13.0827, 80.2707',
-      'Kolkata, West Bengal, 22.5726, 88.3639'
+      'Mumbai, Maharashtra',
+      'New Delhi',
+      'Bangalore, Karnataka',
+      'Chennai, Tamil Nadu',
+      'Kolkata, West Bengal',
+      'Pune, Maharashtra',
+      'Hyderabad, Telangana',
+      'Ahmedabad, Gujarat'
     ];
     
     ctx.font = '14px Arial';
@@ -388,12 +532,13 @@ function ImageOCRUpload({ onStopsUploaded }) {
           <div className="file-input-wrapper w-full box-border">
             <input
               ref={fileInputRef}
+              id="image-file-input"
               type="file"
               accept="image/*"
               onChange={handleImageSelect}
               className="file-input"
             />
-            <label htmlFor="image-file" className="file-input-label">
+            <label htmlFor="image-file-input" className="file-input-label">
               <div className="upload-icon">📷</div>
               <div className="upload-text">
                 {image ? (
@@ -565,10 +710,10 @@ function ImageOCRUpload({ onStopsUploaded }) {
               <table>
                 <thead>
                   <tr>
-                    <th>District</th>
-                    <th>State</th>
+                    <th>Location Name</th>
                     <th>Latitude</th>
                     <th>Longitude</th>
+                    <th>Source</th>
                     <th>Confidence</th>
                     <th>Status</th>
                   </tr>
@@ -576,15 +721,29 @@ function ImageOCRUpload({ onStopsUploaded }) {
                 <tbody>
                   {extractedData.map((item, index) => {
                     const processedItem = processedStops.find(p => 
-                      p.district === item.district && p.latitude === item.latitude
+                      p.name === item.name && Math.abs((p.latitude || 0) - (item.latitude || 0)) < 0.001
                     );
                     
                     return (
                       <tr key={index}>
-                        <td>{item.district}</td>
-                        <td>{item.stateName}</td>
-                        <td style={{ fontFamily: 'monospace' }}>{item.latitude.toFixed(6)}</td>
-                        <td style={{ fontFamily: 'monospace' }}>{item.longitude.toFixed(6)}</td>
+                        <td>{item.name}</td>
+                        <td style={{ fontFamily: 'monospace' }}>
+                          {item.latitude ? item.latitude.toFixed(6) : 'N/A'}
+                        </td>
+                        <td style={{ fontFamily: 'monospace' }}>
+                          {item.longitude ? item.longitude.toFixed(6) : 'N/A'}
+                        </td>
+                        <td>
+                          <span style={{ 
+                            fontSize: '0.75rem',
+                            color: item.source === 'OCR_geocoded' ? '#10b981' : 
+                                   item.source === 'OCR_with_coordinates' ? '#667eea' : '#f59e0b'
+                          }}>
+                            {item.source === 'OCR_geocoded' ? '🌍 Geocoded' :
+                             item.source === 'OCR_with_coordinates' ? '📍 Direct' :
+                             item.source === 'OCR_failed_geocoding' ? '❌ Failed' : 'OCR'}
+                          </span>
+                        </td>
                         <td>
                           <span style={{ 
                             color: item.confidence > 0.7 ? '#10b981' : item.confidence > 0.5 ? '#f59e0b' : '#ef4444',
@@ -597,6 +756,8 @@ function ImageOCRUpload({ onStopsUploaded }) {
                           {processedItem ? (
                             processedItem.status === 'success' ? (
                               <span style={{ color: '#10b981' }}>✅ Added</span>
+                            ) : processedItem.status === 'skipped' ? (
+                              <span style={{ color: '#f59e0b' }}>⏭️ Skipped</span>
                             ) : (
                               <span style={{ color: '#ef4444' }}>❌ Failed</span>
                             )
@@ -644,24 +805,24 @@ function ImageOCRUpload({ onStopsUploaded }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ color: '#10b981' }}>✅</span>
-              <span>Clear, high-resolution images (JPG, PNG, WEBP)</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ color: '#10b981' }}>✅</span>
-              <span>Tabular data with District, State, Latitude, Longitude</span>
+              <span>Clear images with location names (JPG, PNG, WEBP)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ color: '#10b981' }}>✅</span>
               <span>Both handwritten and printed text</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ color: '#10b981' }}>✅</span>
+              <span>Location names with or without coordinates</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ color: '#667eea' }}>🔍</span>
-              <span>Good lighting and minimal background noise</span>
+              <span>Automatic geocoding for location names</span>
             </div>
           </div>
           
           <h4 style={{ margin: '0 0 1rem 0', color: '#667eea', fontSize: '1rem' }}>
-            📝 Expected Data Format
+            📝 Supported Data Formats
           </h4>
           <div style={{ 
             background: 'white', 
@@ -673,12 +834,20 @@ function ImageOCRUpload({ onStopsUploaded }) {
             overflow: 'auto'
           }}>
             <div style={{ color: '#667eea', fontWeight: '600', marginBottom: '0.5rem' }}>
-              District, State, Latitude, Longitude
+              Option 1: Just Location Names (Recommended)
+            </div>
+            <div style={{ color: '#64748b' }}>
+Mumbai, Maharashtra<br/>
+New Delhi<br/>
+Bangalore<br/>
+Chennai, Tamil Nadu
+            </div>
+            <div style={{ color: '#667eea', fontWeight: '600', margin: '1rem 0 0.5rem 0' }}>
+              Option 2: With Coordinates
             </div>
             <div style={{ color: '#64748b' }}>
 Mumbai, Maharashtra, 19.0760, 72.8777<br/>
-Delhi, Delhi, 28.7041, 77.1025<br/>
-Bangalore, Karnataka, 12.9716, 77.5946
+Delhi, 28.7041, 77.1025
             </div>
           </div>
         </div>
@@ -688,12 +857,12 @@ Bangalore, Karnataka, 12.9716, 77.5946
           fontSize: window.innerWidth <= 768 ? '0.8125rem' : '0.875rem',
           lineHeight: '1.5'
         }}>
-          <li>Ensure text is clearly visible and not blurred</li>
-          <li>Use good lighting when capturing images</li>
-          <li>Coordinates should be in decimal degrees format</li>
-          <li>The system will validate coordinates for accuracy</li>
+          <li>Just write location names - coordinates will be found automatically</li>
+          <li>Works with handwritten text using advanced OCR</li>
+          <li>Supports both English and Hindi text recognition</li>
+          <li>Use good lighting and clear handwriting for best results</li>
           <li>Download the sample image for reference format</li>
-          <li>OCR works best with structured, tabular data</li>
+          <li>System will geocode location names to get coordinates</li>
         </ul>
       </div>
     </div>
