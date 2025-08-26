@@ -363,19 +363,42 @@ function InteractiveMap({
         !isNaN(parseFloat(stop.longitude))
       );
 
+      console.log('InteractiveMap - Total stops received:', stops.length);
+      console.log('InteractiveMap - Valid stops after filtering:', validStops.length);
+      console.log('InteractiveMap - Route data:', route);
+
       if (validStops.length === 0) return;
 
       // Add stop markers
       validStops.forEach((stop, index) => {
         try {
-          const isInRoute = route && route.route && route.route.includes(stop.id);
-          const routeIndex = isInRoute ? route.route.indexOf(stop.id) + 1 : null;
+          // Check if this stop is in the route - handle both ID and index matching
+          let isInRoute = false;
+          let routeIndex = null;
+          
+          if (route && route.route && Array.isArray(route.route)) {
+            // First try to match by stop ID
+            const idIndex = route.route.indexOf(stop.id);
+            if (idIndex !== -1) {
+              isInRoute = true;
+              routeIndex = idIndex + 1;
+            } else {
+              // Try to match by array index (fallback for different route formats)
+              const arrayIndex = route.route.indexOf(index);
+              if (arrayIndex !== -1) {
+                isInRoute = true;
+                routeIndex = arrayIndex + 1;
+              }
+            }
+          }
           
           // Check if this is an OCR-extracted stop
           const isOCRStop = stop.name && stop.name.includes(',') && 
                            (stop.name.includes('Maharashtra') || stop.name.includes('Delhi') || 
                             stop.name.includes('Karnataka') || stop.name.includes('Tamil Nadu') ||
                             stop.name.includes('West Bengal') || stop.source === 'OCR');
+          
+          console.log(`Stop ${index + 1}: ${stop.name}, ID: ${stop.id}, isInRoute: ${isInRoute}, routeIndex: ${routeIndex}`);
           
           const marker = L.marker(
             [parseFloat(stop.latitude), parseFloat(stop.longitude)],
@@ -469,9 +492,28 @@ function InteractiveMap({
 
       if (allPoints.length > 0) {
         try {
-          mapInstanceRef.current.fitBounds(allPoints, { 
-            padding: [20, 20],
-            maxZoom: 15
+          // Calculate bounds with proper padding
+          const bounds = L.latLngBounds(allPoints);
+          
+          // Add padding based on screen size
+          const padding = window.innerWidth <= 768 ? [10, 10] : [30, 30];
+          
+          // Determine appropriate max zoom based on number of points and spread
+          const latSpread = bounds.getNorth() - bounds.getSouth();
+          const lngSpread = bounds.getEast() - bounds.getWest();
+          const maxSpread = Math.max(latSpread, lngSpread);
+          
+          let maxZoom = 15;
+          if (maxSpread > 10) maxZoom = 6;      // Very spread out
+          else if (maxSpread > 5) maxZoom = 8;  // Moderately spread out
+          else if (maxSpread > 1) maxZoom = 10; // Close together
+          else if (maxSpread > 0.1) maxZoom = 12; // Very close
+          
+          console.log(`Map bounds - Points: ${allPoints.length}, Spread: ${maxSpread.toFixed(4)}, MaxZoom: ${maxZoom}`);
+          
+          mapInstanceRef.current.fitBounds(bounds, { 
+            padding: padding,
+            maxZoom: maxZoom
           });
         } catch (error) {
           console.warn('Error fitting bounds:', error);

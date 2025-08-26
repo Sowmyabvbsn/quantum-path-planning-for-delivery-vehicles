@@ -170,6 +170,8 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   console.log('QuantumDashboard render - selectedStops:', selectedStops);
   console.log('QuantumDashboard render - stops:', stops);
   console.log('QuantumDashboard render - selectedStopData:', selectedStopData);
+  console.log('QuantumDashboard render - selectedStopData length:', selectedStopData.length);
+  console.log('QuantumDashboard render - selectedStopData details:', selectedStopData.map(s => ({ id: s.id, name: s.name, lat: s.latitude, lng: s.longitude })));
 
   return (
     <div className="quantum-dashboard w-full box-border">
@@ -260,6 +262,19 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   <p>
                     Please go to the "Manage Stops" tab and select at least 2 stops for optimization.
                   </p>
+                  <div style={{ 
+                    marginTop: '1rem', 
+                    padding: '1rem', 
+                    background: '#f3f4f6', 
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    <strong>Debug Info:</strong><br/>
+                    selectedStops: {JSON.stringify(selectedStops)}<br/>
+                    stops.length: {stops.length}<br/>
+                    selectedStopData.length: {selectedStopData.length}
+                  </div>
                 </div>
               </div>
             )}
