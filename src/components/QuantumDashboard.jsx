@@ -61,19 +61,18 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
 
     setLoading(true);
     setProgress(0);
-    setCurrentStep('Store/Fetch stops & route data...');
+    setCurrentStep('Initializing quantum optimization...');
     setMessage('');
 
     try {
       // Simulate progress updates
       const progressSteps = [
-        { progress: 15, step: 'Calculate Distance Matrix (Haversine)...' },
-        { progress: 30, step: 'Send distance matrix to Quantum Layer...' },
-        { progress: 50, step: 'Run QAOA Circuit...' },
-        { progress: 65, step: 'Generate candidate routes...' },
-        { progress: 80, step: 'Forward candidate routes to Classical Post-Processing...' },
-        { progress: 90, step: 'Heuristic optimization...' },
-        { progress: 95, step: 'Return optimized route...' }
+        { progress: 10, step: 'Calculating distance matrix using Haversine formula...' },
+        { progress: 25, step: 'Preparing quantum circuit...' },
+        { progress: 40, step: 'Executing QAOA algorithm...' },
+        { progress: 65, step: 'Running quantum optimization...' },
+        { progress: 80, step: 'Decoding quantum results...' },
+        { progress: 95, step: 'Finalizing optimal route...' }
       ];
 
       for (const { progress: prog, step } of progressSteps) {
@@ -110,7 +109,7 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       }
 
       setProgress(100);
-      setCurrentStep('Optimization complete! Route ready for visualization.');
+      setCurrentStep('Hybrid quantum-classical optimization complete!');
       
       setTimeout(() => {
         onOptimizationComplete(result);
@@ -170,8 +169,6 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
   console.log('QuantumDashboard render - selectedStops:', selectedStops);
   console.log('QuantumDashboard render - stops:', stops);
   console.log('QuantumDashboard render - selectedStopData:', selectedStopData);
-  console.log('QuantumDashboard render - selectedStopData length:', selectedStopData.length);
-  console.log('QuantumDashboard render - selectedStopData details:', selectedStopData.map(s => ({ id: s.id, name: s.name, lat: s.latitude, lng: s.longitude })));
 
   return (
     <div className="quantum-dashboard w-full box-border">
@@ -262,19 +259,6 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
                   <p>
                     Please go to the "Manage Stops" tab and select at least 2 stops for optimization.
                   </p>
-                  <div style={{ 
-                    marginTop: '1rem', 
-                    padding: '1rem', 
-                    background: '#f3f4f6', 
-                    borderRadius: '8px',
-                    fontSize: '0.875rem',
-                    fontFamily: 'monospace'
-                  }}>
-                    <strong>Debug Info:</strong><br/>
-                    selectedStops: {JSON.stringify(selectedStops)}<br/>
-                    stops.length: {stops.length}<br/>
-                    selectedStopData.length: {selectedStopData.length}
-                  </div>
                 </div>
               </div>
             )}

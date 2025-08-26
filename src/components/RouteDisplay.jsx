@@ -1,29 +1,13 @@
 import React, { useState } from 'react';
 import InteractiveMap from './InteractiveMap';
-import useRouteVisualization from './RouteVisualization';
 
 function RouteDisplay({ route, stops }) {
   const [showDetails, setShowDetails] = useState(true);
   const [showAnimation, setShowAnimation] = useState(false);
   const [selectedStop, setSelectedStop] = useState(null);
-  const [enhancedRoute, setEnhancedRoute] = useState(route);
-
-  // Define handleRouteUpdate before using it in the hook
-  const handleRouteUpdate = (updatedRoute) => {
-    setEnhancedRoute(updatedRoute);
-  };
-
-  // Use the route visualization hook
-  const { routeGeometry, loading: routeLoading, error: routeError, regenerateRoute } = useRouteVisualization(
-    route, 
-    stops, 
-    handleRouteUpdate
-  );
 
   console.log('RouteDisplay - route:', route);
   console.log('RouteDisplay - stops:', stops);
-  console.log('RouteDisplay - stops length:', stops?.length);
-  console.log('RouteDisplay - route.route:', route?.route);
 
   // Check if we have any route data at all
   if (!route) {
@@ -49,17 +33,6 @@ function RouteDisplay({ route, stops }) {
             <span className="empty-icon">⚠️</span>
             <h3>Invalid Route Data</h3>
             <p>The optimization result doesn't contain valid route information</p>
-            <div style={{ 
-              marginTop: '1rem', 
-              padding: '1rem', 
-              background: '#f3f4f6', 
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              fontFamily: 'monospace'
-            }}>
-              <strong>Debug Info:</strong><br/>
-              Route object: {JSON.stringify(route, null, 2)}
-            </div>
           </div>
         </div>
       </div>
@@ -72,39 +45,20 @@ function RouteDisplay({ route, stops }) {
   if (route.stops && Array.isArray(route.stops) && route.stops.length > 0) {
     // Use the stops data directly from the route response
     routeStops = route.stops;
-    console.log('RouteDisplay - Using route.stops:', routeStops.length);
   } else {
     // Map route indices to actual stop data
-    console.log('RouteDisplay - Mapping route indices to stops');
-    console.log('RouteDisplay - route.route:', route.route);
-    console.log('RouteDisplay - Available stops:', stops.map(s => ({ id: s.id, name: s.name })));
-    
-    routeStops = route.route.map((stopIndex, routePosition) => {
-      console.log(`RouteDisplay - Processing route position ${routePosition}, looking for stop with ID/index: ${stopIndex}`);
-      
+    routeStops = route.route.map(stopIndex => {
       // Try to find stop by ID first
       let stop = stops.find(s => s.id === stopIndex);
-      if (stop) {
-        console.log(`RouteDisplay - Found stop by ID: ${stop.name}`);
-        return stop;
-      }
-      
-      // Try treating it as an array index
-      if (typeof stopIndex === 'number' && stopIndex >= 0 && stopIndex < stops.length) {
+      if (!stop) {
+        // Try treating it as an array index
         stop = stops[stopIndex];
-        if (stop) {
-          console.log(`RouteDisplay - Found stop by array index: ${stop.name}`);
-          return stop;
-        }
       }
-      
-      console.warn(`RouteDisplay - Could not find stop for index: ${stopIndex}`);
-      return null;
+      return stop;
     }).filter(Boolean); // Remove any undefined stops
   }
 
   console.log('RouteDisplay - routeStops:', routeStops);
-  console.log('RouteDisplay - routeStops length:', routeStops.length);
 
   if (routeStops.length === 0) {
     return (
@@ -114,20 +68,11 @@ function RouteDisplay({ route, stops }) {
             <span className="empty-icon">⚠️</span>
             <h3>No Valid Stops Found</h3>
             <p>Could not map the route to valid stop data</p>
-            <div style={{ 
-              marginTop: '1rem', 
-              padding: '1rem', 
-              background: '#f3f4f6', 
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              fontFamily: 'monospace'
-            }}>
+            <div className="debug-info">
               <strong>Debug Info:</strong>
-              <div>Route indices: {JSON.stringify(route.route)}</div><br/>
-              <div>Available stops: {stops.length}</div><br/>
-              <div>Available stop IDs: {JSON.stringify(stops.map(s => s.id))}</div><br/>
-              <div>Route.stops exists: {route.stops ? 'Yes' : 'No'}</div><br/>
-              {route.stops && <div>Route.stops length: {route.stops.length}</div>}
+              <div>Route indices: {JSON.stringify(route.route)}</div>
+              <div>Available stops: {stops.length}</div>
+              <div>Route.stops exists: {route.stops ? 'Yes' : 'No'}</div>
             </div>
           </div>
         </div>
@@ -151,13 +96,12 @@ function RouteDisplay({ route, stops }) {
 
   // Create route data structure for the map
   const mapRouteData = {
-    route: enhancedRoute?.route || route.route,
+    route: routeStops.map(stop => stop.id),
     stops: routeStops,
-    total_distance: enhancedRoute?.actualDistance || route.total_distance,
+    total_distance: route.total_distance,
     computation_time: route.computation_time,
     quantum_backend: route.quantum_backend,
-    optimization_level: route.optimization_level,
-    geometry: enhancedRoute?.geometry
+    optimization_level: route.optimization_level
   };
 
   return (
@@ -179,19 +123,6 @@ function RouteDisplay({ route, stops }) {
           </div>
         </div>
 
-        {routeError && (
-          <div className="message error" style={{ margin: '1rem 2rem' }}>
-            Route visualization error: {routeError}
-            <button 
-              className="btn btn-secondary btn-sm" 
-              onClick={regenerateRoute}
-              style={{ marginLeft: '1rem' }}
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
         <div className="route-summary w-full box-border">
           <div className="summary-stats w-full box-border">
             <div className="stat-card">
@@ -199,7 +130,7 @@ function RouteDisplay({ route, stops }) {
               <div className="stat-label">Stops</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{formatDistance(routeGeometry?.distance || enhancedRoute?.actualDistance || route.total_distance || 0)}</div>
+              <div className="stat-value">{formatDistance(route.total_distance || 0)}</div>
               <div className="stat-label">Total Distance</div>
             </div>
             <div className="stat-card">
@@ -210,12 +141,6 @@ function RouteDisplay({ route, stops }) {
               <div className="stat-value">{route.quantum_backend || 'Unknown'}</div>
               <div className="stat-label">Backend</div>
             </div>
-            {routeGeometry?.duration && (
-              <div className="stat-card">
-                <div className="stat-value">{Math.round(routeGeometry.duration)} min</div>
-                <div className="stat-label">Est. Duration</div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -423,7 +348,6 @@ function RouteDisplay({ route, stops }) {
               const routeData = {
                 stops: routeStops,
                 totalDistance: route.total_distance,
-                estimatedDuration: enhancedRoute?.estimatedDuration,
                 optimizationTime: route.computation_time,
                 backend: route.quantum_backend
               };
