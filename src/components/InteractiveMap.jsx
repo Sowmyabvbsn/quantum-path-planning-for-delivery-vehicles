@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapLegend from './MapLegend';
+import obstacleService from '../services/obstacleService';
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -95,6 +96,8 @@ function InteractiveMap({
   const [mapReady, setMapReady] = useState(false);
   const [userLocation, setUserLocation] = useState(currentLocation);
   const [loadingObstacles, setLoadingObstacles] = useState(false);
+  const [realTimeObstacles, setRealTimeObstacles] = useState([]);
+  const [obstacleUpdateInterval, setObstacleUpdateInterval] = useState(null);
   const [mapTilesLoaded, setMapTilesLoaded] = useState(false);
 
   // Get user's current location
@@ -119,29 +122,79 @@ function InteractiveMap({
   // Fetch realistic obstacles from multiple data sources
   useEffect(() => {
     if (stops.length > 0) {
-      fetchRealisticObstacles();
+      fetchRealTimeObstacles();
+      
+      // Set up real-time updates every 5 minutes
+      const interval = setInterval(() => {
+        fetchRealTimeObstacles();
+      }, 5 * 60 * 1000);
+      
+      setObstacleUpdateInterval(interval);
+      
+      return () => {
+        if (interval) clearInterval(interval);
+      };
     }
-  }, [stops]);
+  }, [stops, route]);
 
-  const fetchRealisticObstacles = async () => {
+  const fetchRealTimeObstacles = async () => {
     setLoadingObstacles(true);
     try {
-      const obstacles = await Promise.all([
-        fetchTrafficIncidents(),
-        fetchWeatherAlerts(),
-        fetchConstructionData(),
-        fetchPublicEvents()
-      ]);
+      // Create route coordinates for obstacle detection
+      let routeCoordinates = [];
       
-      const allObstacles = obstacles.flat().filter(Boolean);
-      setCurrentObstacles(allObstacles);
+      // Add user location if available
+      if (userLocation) {
+        routeCoordinates.push([userLocation.latitude, userLocation.longitude]);
+      }
+      
+      // Add stop coordinates
+      const validStops = stops.filter(stop => 
+        stop && stop.latitude && stop.longitude && 
+        !isNaN(parseFloat(stop.latitude)) && !isNaN(parseFloat(stop.longitude))
+      );
+      
+      routeCoordinates = routeCoordinates.concat(
+        validStops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)])
+      );
+      
+      if (routeCoordinates.length === 0) {
+        setCurrentObstacles([]);
+        return;
+      }
+      
+      // Fetch real-time obstacles
+      const obstacles = await obstacleService.getRouteObstacles(routeCoordinates, {
+        includeWeather: true,
+        includeTraffic: true,
+        includeConstruction: true,
+        includeEvents: true,
+        maxObstacles: 15
+      });
+      
+      setRealTimeObstacles(obstacles);
+      setCurrentObstacles(obstacles);
+      
+      console.log(`Fetched ${obstacles.length} real-time obstacles`);
     } catch (error) {
-      console.warn('Could not fetch real-time obstacles, using simulated data:', error);
-      setCurrentObstacles(generateEnhancedObstacles(stops));
+      console.warn('Real-time obstacle fetch failed, using fallback:', error);
+      const fallbackObstacles = await obstacleService.getFallbackObstacles(
+        stops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)])
+      );
+      setCurrentObstacles(fallbackObstacles);
     } finally {
       setLoadingObstacles(false);
     }
   };
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (obstacleUpdateInterval) {
+        clearInterval(obstacleUpdateInterval);
+      }
+    };
+  }, [obstacleUpdateInterval]);
 
   // Fetch traffic incidents (simulated with realistic data patterns)
   const fetchTrafficIncidents = async () => {
@@ -745,7 +798,7 @@ function InteractiveMap({
           padding: '8px 12px',
           borderRadius: '6px',
           fontSize: '0.875rem',
-          color: '#f59e0b',
+          color: '#10b981',
           fontWeight: '500',
           zIndex: 1000,
           display: 'flex',
@@ -755,12 +808,40 @@ function InteractiveMap({
           <div style={{
             width: '12px',
             height: '12px',
-            border: '2px solid #f59e0b',
+            border: '2px solid #10b981',
             borderTop: '2px solid transparent',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite'
           }}></div>
-          Loading real-time data...
+          Updating obstacles...
+        </div>
+      )}
+      
+      {/* Real-time data indicator */}
+      {realTimeObstacles.length > 0 && !loadingObstacles && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          background: 'rgba(16, 185, 129, 0.9)',
+          color: 'white',
+          padding: '6px 10px',
+          borderRadius: '6px',
+          fontSize: '0.75rem',
+          fontWeight: '500',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: '#ffffff',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}></div>
+          Live Data Active
         </div>
       )}
       
@@ -821,130 +902,34 @@ function InteractiveMap({
           position: 'absolute',
           bottom: '10px',
           left: '10px',
-          background: 'rgba(239, 68, 68, 0.9)',
+          background: currentObstacles.some(o => o.severity === 'High') 
+            ? 'rgba(239, 68, 68, 0.9)' 
+            : 'rgba(245, 158, 11, 0.9)',
           color: 'white',
           padding: '6px 10px',
           borderRadius: '6px',
           fontSize: '0.75rem',
           fontWeight: '500',
-          zIndex: 1000
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
         }}>
-          ⚠️ {currentObstacles.length} Active Obstacles
+          <span>
+            {currentObstacles.some(o => o.severity === 'High') ? '🚨' : '⚠️'}
+          </span>
+          {currentObstacles.length} Live Obstacles
+          <div style={{
+            fontSize: '0.625rem',
+            opacity: 0.8,
+            marginLeft: '4px'
+          }}>
+            {realTimeObstacles.length > 0 ? 'REAL-TIME' : 'SIMULATED'}
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-// Enhanced obstacle generation functions with realistic data patterns
-function generateTrafficIncidents(stops) {
-  const incidents = [];
-  const incidentTypes = [
-    { type: 'Traffic', description: 'Heavy congestion reported', severity: 'Medium', duration: '30-45 min' },
-    { type: 'Accident', description: 'Multi-vehicle collision', severity: 'High', duration: '1-2 hours' },
-    { type: 'Road Closure', description: 'Emergency road closure', severity: 'High', duration: 'Unknown' }
-  ];
-
-  stops.forEach((stop, index) => {
-    if (index < stops.length - 1 && Math.random() > 0.7) {
-      const nextStop = stops[index + 1];
-      const incident = incidentTypes[Math.floor(Math.random() * incidentTypes.length)];
-      
-      incidents.push({
-        lat: (parseFloat(stop.latitude) + parseFloat(nextStop.latitude)) / 2 + (Math.random() - 0.5) * 0.01,
-        lng: (parseFloat(stop.longitude) + parseFloat(nextStop.longitude)) / 2 + (Math.random() - 0.5) * 0.01,
-        ...incident,
-        source: 'Traffic Management Center',
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  return incidents;
-}
-
-function generateWeatherAlerts(stops) {
-  const alerts = [];
-  const weatherTypes = [
-    { type: 'Weather', description: 'Heavy rain affecting visibility', severity: 'Medium', duration: '2-3 hours' },
-    { type: 'Flooding', description: 'Street flooding reported', severity: 'High', duration: '4-6 hours' },
-    { type: 'Weather', description: 'Strong winds, drive carefully', severity: 'Low', duration: '1-2 hours' }
-  ];
-
-  // Simulate weather affecting certain areas
-  if (stops.length > 2 && Math.random() > 0.6) {
-    const randomStop = stops[Math.floor(Math.random() * stops.length)];
-    const weather = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
-    
-    alerts.push({
-      lat: parseFloat(randomStop.latitude) + (Math.random() - 0.5) * 0.02,
-      lng: parseFloat(randomStop.longitude) + (Math.random() - 0.5) * 0.02,
-      ...weather,
-      source: 'National Weather Service',
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  return alerts;
-}
-
-function generateConstructionData(stops) {
-  const construction = [];
-  const constructionTypes = [
-    { type: 'Construction', description: 'Road maintenance in progress', severity: 'Medium', duration: '2 weeks' },
-    { type: 'Construction', description: 'Bridge repair work', severity: 'High', duration: '1 month' },
-    { type: 'Construction', description: 'Utility work, lane closure', severity: 'Low', duration: '3 days' }
-  ];
-
-  stops.forEach((stop, index) => {
-    if (Math.random() > 0.8) {
-      const work = constructionTypes[Math.floor(Math.random() * constructionTypes.length)];
-      
-      construction.push({
-        lat: parseFloat(stop.latitude) + (Math.random() - 0.5) * 0.005,
-        lng: parseFloat(stop.longitude) + (Math.random() - 0.5) * 0.005,
-        ...work,
-        source: 'Department of Transportation',
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  return construction;
-}
-
-function generatePublicEvents(stops) {
-  const events = [];
-  const eventTypes = [
-    { type: 'Event', description: 'Concert causing traffic delays', severity: 'Medium', duration: '4 hours' },
-    { type: 'Protest', description: 'Peaceful demonstration', severity: 'Low', duration: '2 hours' },
-    { type: 'Event', description: 'Sports event, expect crowds', severity: 'Medium', duration: '3 hours' }
-  ];
-
-  // Simulate events in urban areas
-  if (stops.length > 1 && Math.random() > 0.7) {
-    const randomStop = stops[Math.floor(Math.random() * stops.length)];
-    const event = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-    
-    events.push({
-      lat: parseFloat(randomStop.latitude) + (Math.random() - 0.5) * 0.008,
-      lng: parseFloat(randomStop.longitude) + (Math.random() - 0.5) * 0.008,
-      ...event,
-      source: 'City Events Calendar',
-      timestamp: new Date().toISOString()
-    });
-  }
-
-  return events;
-}
-
-function generateEnhancedObstacles(stops) {
-  return [
-    ...generateTrafficIncidents(stops),
-    ...generateWeatherAlerts(stops),
-    ...generateConstructionData(stops),
-    ...generatePublicEvents(stops)
-  ];
 }
 
 // Hybrid route optimization combining QAOA with classical algorithms

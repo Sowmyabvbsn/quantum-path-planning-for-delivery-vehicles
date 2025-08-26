@@ -1,10 +1,47 @@
 import React, { useState } from 'react';
 import InteractiveMap from './InteractiveMap';
+import ObstaclePanel from './ObstaclePanel';
+import obstacleService from '../services/obstacleService';
 
 function RouteDisplay({ route, stops }) {
   const [showDetails, setShowDetails] = useState(true);
   const [showAnimation, setShowAnimation] = useState(false);
   const [selectedStop, setSelectedStop] = useState(null);
+  const [obstacles, setObstacles] = useState([]);
+  const [loadingObstacles, setLoadingObstacles] = useState(false);
+  const [showObstacles, setShowObstacles] = useState(true);
+
+  // Fetch obstacles for the optimized route
+  React.useEffect(() => {
+    if (route && route.route && routeStops.length > 0) {
+      fetchRouteObstacles();
+    }
+  }, [route]);
+
+  const fetchRouteObstacles = async () => {
+    setLoadingObstacles(true);
+    try {
+      const coordinates = routeStops.map(stop => [
+        parseFloat(stop.latitude),
+        parseFloat(stop.longitude)
+      ]);
+      
+      const routeObstacles = await obstacleService.getRouteObstacles(coordinates, {
+        includeWeather: true,
+        includeTraffic: true,
+        includeConstruction: true,
+        includeEvents: true,
+        maxObstacles: 20
+      });
+      
+      setObstacles(routeObstacles);
+    } catch (error) {
+      console.error('Error fetching route obstacles:', error);
+      setObstacles([]);
+    } finally {
+      setLoadingObstacles(false);
+    }
+  };
 
   console.log('RouteDisplay - route:', route);
   console.log('RouteDisplay - stops:', stops);
@@ -115,11 +152,30 @@ function RouteDisplay({ route, stops }) {
           <div className="route-status" style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem'
+            gap: '0.5rem',
+            flexWrap: 'wrap'
           }}>
             <span className="status-badge success">
               ✅ Optimization Complete
             </span>
+            {obstacles.length > 0 && (
+              <span className="status-badge warning" style={{
+                background: obstacles.some(o => o.severity === 'High') 
+                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
+                  : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '20px',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                {obstacles.some(o => o.severity === 'High') ? '🚨' : '⚠️'}
+                {obstacles.length} Obstacles Detected
+              </span>
+            )}
           </div>
         </div>
 
@@ -145,6 +201,127 @@ function RouteDisplay({ route, stops }) {
         </div>
 
         <div className="route-visualization w-full box-border">
+          {/* Obstacle Analysis Section */}
+          {obstacles.length > 0 && (
+            <div className="obstacle-analysis w-full box-border" style={{ marginBottom: '2rem' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <h3>🚧 Route Obstacle Analysis</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={fetchRouteObstacles}
+                    disabled={loadingObstacles}
+                  >
+                    {loadingObstacles ? (
+                      <>
+                        <span className="spinner" style={{ width: '12px', height: '12px' }}></span>
+                        Updating
+                      </>
+                    ) : (
+                      <>🔄 Refresh</>
+                    )}
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowObstacles(!showObstacles)}
+                  >
+                    {showObstacles ? '🙈 Hide' : '👁️ Show'} Obstacles
+                  </button>
+                </div>
+              </div>
+              
+              {showObstacles && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: window.innerWidth <= 768 ? '1fr' : '2fr 1fr',
+                  gap: '1.5rem'
+                }}>
+                  <div>
+                    <ObstaclePanel
+                      obstacles={obstacles}
+                      loading={loadingObstacles}
+                      onRefresh={fetchRouteObstacles}
+                      onObstacleClick={(obstacle) => {
+                        console.log('Obstacle clicked:', obstacle);
+                        // Could zoom map to obstacle location
+                      }}
+                    />
+                  </div>
+                  
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.98)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    padding: '1.5rem'
+                  }}>
+                    <h4 style={{ margin: '0 0 1rem 0' }}>🎯 Impact Assessment</h4>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{
+                        padding: '1rem',
+                        background: obstacles.some(o => o.severity === 'High') 
+                          ? 'rgba(239, 68, 68, 0.1)' 
+                          : 'rgba(245, 158, 11, 0.1)',
+                        borderRadius: '12px',
+                        border: `1px solid ${obstacles.some(o => o.severity === 'High') 
+                          ? 'rgba(239, 68, 68, 0.2)' 
+                          : 'rgba(245, 158, 11, 0.2)'}`
+                      }}>
+                        <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+                          Route Risk Level: {obstacles.some(o => o.severity === 'High') ? '🚨 HIGH' : '⚠️ MODERATE'}
+                        </div>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                          {obstacles.some(o => o.severity === 'High') 
+                            ? 'Consider alternative routes or delay departure'
+                            : 'Proceed with caution and monitor conditions'
+                          }
+                        </div>
+                      </div>
+                      
+                      <div style={{
+                        padding: '1rem',
+                        background: 'rgba(102, 126, 234, 0.05)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(102, 126, 234, 0.1)'
+                      }}>
+                        <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+                          📊 Obstacle Breakdown
+                        </div>
+                        <div style={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div>🚨 High Risk: {obstacles.filter(o => o.severity === 'High').length}</div>
+                          <div>⚠️ Medium Risk: {obstacles.filter(o => o.severity === 'Medium').length}</div>
+                          <div>💡 Low Risk: {obstacles.filter(o => o.severity === 'Low').length}</div>
+                        </div>
+                      </div>
+                      
+                      <div style={{
+                        padding: '1rem',
+                        background: 'rgba(16, 185, 129, 0.05)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(16, 185, 129, 0.1)'
+                      }}>
+                        <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>
+                          🔄 Real-time Updates
+                        </div>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b' }}>
+                          Obstacle data refreshes every 5 minutes automatically. 
+                          Click refresh for immediate updates.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
           <div className="map-section w-full box-border">
             <div className="map-header" style={{
               display: 'flex',
@@ -173,6 +350,7 @@ function RouteDisplay({ route, stops }) {
               <InteractiveMap
                 stops={routeStops}
                 route={mapRouteData}
+                obstacles={obstacles}
                 showAnimation={showAnimation}
                 onAnimationComplete={() => setShowAnimation(false)}
                 height={window.innerWidth <= 768 ? "400px" : "500px"}
@@ -313,6 +491,16 @@ function RouteDisplay({ route, stops }) {
                 <strong>Quantum Backend:</strong>
                 <span>{route.quantum_backend || 'Unknown'}</span>
               </div>
+              {obstacles.length > 0 && (
+                <div className="detail-item" style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem'
+                }}>
+                  <strong>Route Obstacles:</strong>
+                  <span>{obstacles.length} detected ({obstacles.filter(o => o.severity === 'High').length} high risk)</span>
+                </div>
+              )}
               <div className="detail-item" style={{
                 display: 'flex',
                 flexDirection: 'column',

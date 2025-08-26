@@ -59,6 +59,12 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
       return;
     }
 
+    console.log('Starting optimization with:', {
+      selectedStops,
+      selectedStopData: selectedStopData.map(s => ({ id: s.id, name: s.name })),
+      totalStops: stops.length
+    });
+
     setLoading(true);
     setProgress(0);
     setCurrentStep('Initializing quantum optimization...');
@@ -104,8 +110,16 @@ function QuantumDashboard({ selectedStops, stops, onOptimizationComplete, loadin
         optimization_level: optimizationParams.optimization_level
       });
 
+      console.log('Optimization result:', result);
+      console.log('Result route length:', result.route ? result.route.length : 0);
+      console.log('Expected stops:', selectedStops.length);
+
       if (!result.route || !Array.isArray(result.route)) {
         throw new Error('Invalid optimization result: missing route array');
+      }
+
+      if (result.route.length !== selectedStops.length) {
+        console.warn(`Route length mismatch: got ${result.route.length}, expected ${selectedStops.length}`);
       }
 
       setProgress(100);
