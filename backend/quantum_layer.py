@@ -24,6 +24,7 @@ class QuantumLayer:
     
     def __init__(self):
         self.ibm_token = os.getenv('IBM_QUANTUM_TOKEN')
+        self.google_api_key = os.getenv('GOOGLE_CLOUD_API_KEY')
         self.service = None
         self.setup_quantum_service()
     

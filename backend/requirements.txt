@@ -12,3 +12,7 @@ python-dotenv==1.0.0
 sqlalchemy==2.0.23
 pillow==10.1.0
 opencv-python==4.8.1.78
+google-cloud-core==2.4.1
+google-api-python-client==2.108.0
+googlemaps==4.10.0
+requests==2.31.0

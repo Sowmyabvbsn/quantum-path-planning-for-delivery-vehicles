@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapLegend from './MapLegend';
 import obstacleService from '../services/obstacleService';
+import routeService from '../services/routeService';
 
 // Fix for default markers in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -284,17 +285,19 @@ function InteractiveMap({
         maxBoundsViscosity: 0.8
       });
 
-      // Add responsive tile layer with retina support - Initialize map tiles only once
-      const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
+      // Add Google Maps tile layer with retina support - Initialize map tiles only once
+      const tileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
+        maxZoom: 20,
         tileSize: 256,
         zoomOffset: 0,
         detectRetina: true,
         // Mobile performance optimizations
         updateWhenIdle: true,
         updateWhenZooming: false,
-        keepBuffer: 2
+        keepBuffer: 2,
+        // Google Maps specific
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
       });
       
       // Add tile layer load event listener
@@ -529,83 +532,144 @@ function InteractiveMap({
     }
   }, [stops, route, currentObstacles, onStopClick, mapReady, userLocation]);
 
-  // Update route with hybrid optimization
+  // Update route with road-following optimization
   useEffect(() => {
     if (!mapInstanceRef.current || !mapReady) return;
 
-    try {
-      // Clear existing route
-      if (routeLayerRef.current) {
-        mapInstanceRef.current.removeLayer(routeLayerRef.current);
-        routeLayerRef.current = null;
-      }
+    const updateRoadFollowingRoute = async () => {
+      try {
+        // Clear existing route
+        if (routeLayerRef.current) {
+          mapInstanceRef.current.removeLayer(routeLayerRef.current);
+          routeLayerRef.current = null;
+        }
 
-      const validStops = stops.filter(stop => 
-        stop && 
-        stop.latitude && 
-        stop.longitude && 
-        !isNaN(parseFloat(stop.latitude)) && 
-        !isNaN(parseFloat(stop.longitude))
-      );
+        const validStops = stops.filter(stop =>
+          stop &&
+          stop.latitude &&
+          stop.longitude &&
+          !isNaN(parseFloat(stop.latitude)) &&
+          !isNaN(parseFloat(stop.longitude))
+        );
 
-      if (!route || !route.route || route.route.length < 2 || validStops.length === 0) return;
+        if (!route || !route.route || route.route.length < 2 || validStops.length === 0) return;
 
-      // Convert route indices to coordinates, starting from current location if available
-      let routeCoordinates = [];
-      
-      // Add current location as starting point if available
-      if (userLocation) {
-        routeCoordinates.push([userLocation.latitude, userLocation.longitude]);
-      }
+        // Prepare stops for road-following route
+        let routeStops = [];
 
-      // Add route stops
-      const stopCoordinates = route.route.map(stopIndex => {
-        const stop = validStops.find(s => s.id === stopIndex) || validStops[stopIndex];
-        return stop ? [parseFloat(stop.latitude), parseFloat(stop.longitude)] : null;
-      }).filter(Boolean);
+        // Add current location as starting point if available
+        if (userLocation) {
+          routeStops.push({
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            name: 'Current Location'
+          });
+        }
 
-      routeCoordinates = routeCoordinates.concat(stopCoordinates);
+        // Add route stops in order
+        const orderedStops = route.route.map(stopIndex => {
+          const stop = validStops.find(s => s.id === stopIndex) || validStops[stopIndex];
+          return stop ? {
+            latitude: parseFloat(stop.latitude),
+            longitude: parseFloat(stop.longitude),
+            name: stop.name || `Stop ${stopIndex}`
+          } : null;
+        }).filter(Boolean);
 
-      if (routeCoordinates.length < 2) return;
+        routeStops = routeStops.concat(orderedStops);
 
-      // Calculate optimized route with obstacle avoidance
-      const optimizedRoute = calculateHybridRoute(routeCoordinates, currentObstacles);
+        if (routeStops.length < 2) return;
 
-      // Add route visualization
-      if (showAnimation) {
-        animateRoute(optimizedRoute);
-      } else {
-        // Main optimized route
-        routeLayerRef.current = L.polyline(optimizedRoute, {
-          color: '#667eea',
-          weight: 4,
-          opacity: 0.8,
-          smoothFactor: 1.0
-        }).addTo(mapInstanceRef.current);
+        // Get road-following route from Google Directions API
+        const roadRoute = await routeService.getRoadFollowingRoute(routeStops, {
+          optimize: false, // We already have the optimized order from quantum algorithm
+          avoid: ['tolls'] // Avoid tolls by default
+        });
 
-        // Direct route for comparison (dashed)
-        L.polyline(routeCoordinates, {
-          color: '#e2e8f0',
-          weight: 2,
-          opacity: 0.5,
+        if (roadRoute.success) {
+          // Use road-following coordinates
+          const roadCoordinates = roadRoute.coordinates;
+
+          // Add route visualization
+          if (showAnimation) {
+            animateRoute(roadCoordinates);
+          } else {
+            // Main road-following route
+            routeLayerRef.current = L.polyline(roadCoordinates, {
+              color: '#667eea',
+              weight: 4,
+              opacity: 0.8,
+              smoothFactor: 1.0
+            }).addTo(mapInstanceRef.current);
+
+            // Add route info popup
+            const routeInfo = L.popup()
+              .setLatLng(roadCoordinates[Math.floor(roadCoordinates.length / 2)])
+              .setContent(`
+                <div style="text-align: center; font-family: system-ui;">
+                  <strong>🛣️ Road-Following Route</strong><br/>
+                  <small>Distance: ${(roadRoute.totalDistance / 1000).toFixed(1)} km</small><br/>
+                  <small>Duration: ${Math.round(roadRoute.totalDuration / 60)} min</small><br/>
+                  ${roadRoute.durationInTraffic > roadRoute.totalDuration ?
+                    `<small style="color: #f59e0b;">Traffic delay: +${Math.round((roadRoute.durationInTraffic - roadRoute.totalDuration) / 60)} min</small>` :
+                    '<small style="color: #10b981;">No traffic delays</small>'
+                  }
+                </div>
+              `);
+
+            // Add distance labels along the route
+            addDistanceLabels(roadCoordinates);
+          }
+        } else {
+          // Fallback to straight-line route if Google Directions fails
+          console.warn('Road-following route failed, using fallback:', roadRoute.error);
+          const fallbackCoordinates = roadRoute.fallbackCoordinates || routeStops.map(stop => [stop.latitude, stop.longitude]);
+
+          routeLayerRef.current = L.polyline(fallbackCoordinates, {
+            color: '#f59e0b',
+            weight: 3,
+            opacity: 0.7,
+            dashArray: '10, 5'
+          }).addTo(mapInstanceRef.current);
+
+          // Show warning popup
+          L.popup()
+            .setLatLng(fallbackCoordinates[Math.floor(fallbackCoordinates.length / 2)])
+            .setContent(`
+              <div style="text-align: center; font-family: system-ui; color: #f59e0b;">
+                <strong>⚠️ Fallback Route</strong><br/>
+                <small>Road data unavailable</small><br/>
+                <small>Showing direct path</small>
+              </div>
+            `)
+            .openOn(mapInstanceRef.current);
+        }
+
+      } catch (error) {
+        console.error('Error updating road-following route:', error);
+
+        // Fallback to basic route visualization
+        const basicCoordinates = routeStops.map(stop => [stop.latitude, stop.longitude]);
+        routeLayerRef.current = L.polyline(basicCoordinates, {
+          color: '#ef4444',
+          weight: 3,
+          opacity: 0.7,
           dashArray: '5, 10'
         }).addTo(mapInstanceRef.current);
-
-        // Add distance labels
-        addDistanceLabels(optimizedRoute);
       }
-    } catch (error) {
-      console.error('Error updating route:', error);
-    }
+    };
+
+    updateRoadFollowingRoute();
   }, [route, stops, currentObstacles, showAnimation, mapReady, userLocation]);
 
-  // Animation function with smooth transitions
+  // Animation function with smooth transitions for road-following routes
   const animateRoute = (routeCoordinates) => {
     if (!mapInstanceRef.current || routeCoordinates.length < 2) return;
 
     setIsAnimating(true);
     let segmentIndex = 0;
     const segments = [];
+    const animationSpeed = Math.max(50, Math.min(200, 10000 / routeCoordinates.length)); // Adaptive speed
 
     const animateSegment = () => {
       if (segmentIndex >= routeCoordinates.length - 1) {
@@ -617,22 +681,42 @@ function InteractiveMap({
       }
 
       try {
+        // Create animated segment following the road
         const segment = L.polyline(
           [routeCoordinates[segmentIndex], routeCoordinates[segmentIndex + 1]],
           {
             color: '#667eea',
             weight: 4,
-            opacity: 0.8,
-            dashArray: '10, 5'
+            opacity: 0.9,
+            dashArray: '8, 4'
           }
         ).addTo(mapInstanceRef.current);
 
         segments.push(segment);
-        segmentIndex++;
 
-        setTimeout(animateSegment, 800);
+        // Add a moving marker for better visualization
+        if (segmentIndex % 10 === 0) { // Every 10th segment
+          const movingMarker = L.circleMarker(routeCoordinates[segmentIndex], {
+            radius: 6,
+            fillColor: '#667eea',
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+          }).addTo(mapInstanceRef.current);
+
+          // Remove marker after a short time
+          setTimeout(() => {
+            if (mapInstanceRef.current && mapInstanceRef.current.hasLayer(movingMarker)) {
+              mapInstanceRef.current.removeLayer(movingMarker);
+            }
+          }, 2000);
+        }
+
+        segmentIndex++;
+        setTimeout(animateSegment, animationSpeed);
       } catch (error) {
-        console.warn('Error in animation segment:', error);
+        console.error('Animation error:', error);
         setIsAnimating(false);
       }
     };

@@ -5,6 +5,7 @@ import ImageOCRUpload from './components/ImageOCRUpload';
 import RouteDisplay from './components/RouteDisplay';
 import StopsList from './components/StopsList';
 import QuantumDashboard from './components/QuantumDashboard';
+import RouteTestComponent from './components/RouteTestComponent';
 import { getAllStops, deleteStop } from './services/api';
 import './App.css';
 
@@ -78,7 +79,8 @@ function App() {
     { id: 'ocr', label: 'OCR Upload', icon: '📷' },
     { id: 'manage', label: 'Manage Stops', icon: '🗂️' },
     { id: 'optimize', label: 'Quantum Optimization', icon: '🚀' },
-    { id: 'results', label: 'Results', icon: '📊' }
+    { id: 'results', label: 'Results', icon: '📊' },
+    { id: 'test', label: 'Route Test', icon: '🛣️' }
   ];
 
   return (
@@ -163,10 +165,16 @@ function App() {
 
           {activeTab === 'results' && (
             <div className="tab-content">
-              <RouteDisplay 
+              <RouteDisplay
                 route={optimizedRoute}
                 stops={stops}
               />
+            </div>
+          )}
+
+          {activeTab === 'test' && (
+            <div className="tab-content">
+              <RouteTestComponent />
             </div>
           )}
         </div>

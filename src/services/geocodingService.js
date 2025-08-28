@@ -1,23 +1,18 @@
 import axios from 'axios';
 
-// Multiple geocoding providers for better reliability
-const GEOCODING_PROVIDERS = {
-  NOMINATIM: {
-    baseUrl: 'https://nominatim.openstreetmap.org',
-    rateLimit: 1000, // 1 request per second
-    free: true
+// Google Cloud APIs configuration
+const GOOGLE_CLOUD_CONFIG = {
+  GEOCODING: {
+    baseUrl: 'https://maps.googleapis.com/maps/api/geocode/json',
+    apiKey: 'AIzaSyD4N9C7tE_VFlPUjVaAOdSQZNoGO9OTM7w',
+    rateLimit: 50000, // 50,000 requests per day
+    premium: true
   },
-  MAPBOX: {
-    baseUrl: 'https://api.mapbox.com/geocoding/v5/mapbox.places',
-    apiKey: import.meta.env.REACT_APP_MAPBOX_API_KEY,
-    rateLimit: 600, // 600 requests per minute
-    free: false
-  },
-  OPENCAGE: {
-    baseUrl: 'https://api.opencagedata.com/geocode/v1/json',
-    apiKey: import.meta.env.VITE_OPENCAGE_API_KEY,
-    rateLimit: 2500, // 2500 requests per day (free tier)
-    free: true
+  PLACES: {
+    baseUrl: 'https://maps.googleapis.com/maps/api/place',
+    apiKey: 'AIzaSyD4N9C7tE_VFlPUjVaAOdSQZNoGO9OTM7w',
+    rateLimit: 100000, // 100,000 requests per day
+    premium: true
   }
 };
 
@@ -30,7 +25,7 @@ class GeocodingService {
     this.lastRequestTime = 0;
   }
 
-  // Main geocoding function with fallback providers
+  // Main geocoding function using Google Cloud Geocoding API
   async geocodeLocation(locationName, options = {}) {
     if (!locationName || typeof locationName !== 'string') {
       throw new Error('Location name is required');
@@ -48,26 +43,16 @@ class GeocodingService {
     }
 
     try {
-      let result = null;
-      
-      // Try providers in order of preference
-      const providers = this.getAvailableProviders();
-      
-      for (const provider of providers) {
-        try {
-          result = await this.geocodeWithProvider(cleanLocation, provider, options);
-          if (result && result.length > 0) {
-            // Cache successful result
-            this.setCache(cacheKey, result);
-            return result;
-          }
-        } catch (error) {
-          console.warn(`Geocoding failed with ${provider}:`, error.message);
-          continue;
-        }
+      // Use Google Cloud Geocoding API
+      const result = await this.geocodeWithGoogle(cleanLocation, options);
+
+      if (result && result.length > 0) {
+        // Cache successful result
+        this.setCache(cacheKey, result);
+        return result;
       }
 
-      // If all providers fail, try fuzzy matching with cached results
+      // If no results, try fuzzy matching with cached results
       const fuzzyResult = this.fuzzyMatchFromCache(cleanLocation);
       if (fuzzyResult) {
         return fuzzyResult;
@@ -76,12 +61,49 @@ class GeocodingService {
       throw new Error(`No results found for location: ${cleanLocation}`);
 
     } catch (error) {
-      console.error('Geocoding error:', error);
+      console.error('Google Geocoding error:', error);
       throw error;
     }
   }
 
-  // Reverse geocoding - convert coordinates to location name
+  // Google Cloud Geocoding API implementation
+  async geocodeWithGoogle(locationName, options = {}) {
+    const params = {
+      address: locationName,
+      key: GOOGLE_CLOUD_CONFIG.GEOCODING.apiKey,
+      language: options.language || 'en'
+    };
+
+    // Add region bias if specified
+    if (options.region) {
+      params.region = options.region;
+    }
+
+    // Add bounds if specified
+    if (options.bounds) {
+      params.bounds = `${options.bounds.south},${options.bounds.west}|${options.bounds.north},${options.bounds.east}`;
+    }
+
+    // Add component restrictions (country, etc.)
+    if (options.components) {
+      params.components = Object.entries(options.components)
+        .map(([key, value]) => `${key}:${value}`)
+        .join('|');
+    }
+
+    const response = await axios.get(GOOGLE_CLOUD_CONFIG.GEOCODING.baseUrl, {
+      params,
+      timeout: 10000
+    });
+
+    if (response.data.status !== 'OK') {
+      throw new Error(`Google Geocoding API error: ${response.data.status} - ${response.data.error_message || 'Unknown error'}`);
+    }
+
+    return this.parseGoogleGeocodingResults(response.data.results);
+  }
+
+  // Reverse geocoding using Google Cloud Geocoding API
   async reverseGeocode(latitude, longitude, options = {}) {
     if (!this.isValidCoordinate(latitude, longitude)) {
       throw new Error('Invalid coordinates provided');
@@ -93,372 +115,172 @@ class GeocodingService {
     }
 
     try {
-      const providers = this.getAvailableProviders();
-      
-      for (const provider of providers) {
-        try {
-          const result = await this.reverseGeocodeWithProvider(latitude, longitude, provider, options);
-          if (result) {
-            this.setCache(cacheKey, result);
-            return result;
-          }
-        } catch (error) {
-          console.warn(`Reverse geocoding failed with ${provider}:`, error.message);
-          continue;
-        }
+      const result = await this.reverseGeocodeWithGoogle(latitude, longitude, options);
+
+      if (result) {
+        this.setCache(cacheKey, result);
+        return result;
       }
 
-      throw new Error(`No address found for coordinates: ${latitude}, ${longitude}`);
+      throw new Error(`No results found for coordinates: ${latitude}, ${longitude}`);
 
     } catch (error) {
-      console.error('Reverse geocoding error:', error);
+      console.error('Google Reverse Geocoding error:', error);
       throw error;
     }
   }
 
-  // Geocode with Nominatim (OpenStreetMap)
-  async geocodeWithNominatim(locationName, options = {}) {
-    await this.respectRateLimit(GEOCODING_PROVIDERS.NOMINATIM.rateLimit);
-
+  // Google Cloud Reverse Geocoding implementation
+  async reverseGeocodeWithGoogle(latitude, longitude, options = {}) {
     const params = {
-      q: locationName,
-      format: 'json',
-      limit: options.limit || 5,
-      addressdetails: 1,
-      extratags: 1,
-      namedetails: 1,
-      'accept-language': options.language || 'en'
-    };
-
-    // Add country bias if specified
-    if (options.countryCode) {
-      params.countrycodes = options.countryCode;
-    }
-
-    // Add bounding box if specified
-    if (options.bounds) {
-      params.viewbox = `${options.bounds.west},${options.bounds.south},${options.bounds.east},${options.bounds.north}`;
-      params.bounded = 1;
-    }
-
-    const response = await axios.get(`${GEOCODING_PROVIDERS.NOMINATIM.baseUrl}/search`, {
-      params,
-      headers: {
-        'User-Agent': 'Quantum-Path-Planning-App/1.0'
-      },
-      timeout: 10000
-    });
-
-    return this.parseNominatimResponse(response.data);
-  }
-
-  // Geocode with Mapbox (if API key available)
-  async geocodeWithMapbox(locationName, options = {}) {
-    if (!GEOCODING_PROVIDERS.MAPBOX.apiKey) {
-      throw new Error('Mapbox API key not configured');
-    }
-
-    const params = {
-      access_token: GEOCODING_PROVIDERS.MAPBOX.apiKey,
-      limit: options.limit || 5,
+      latlng: `${latitude},${longitude}`,
+      key: GOOGLE_CLOUD_CONFIG.GEOCODING.apiKey,
       language: options.language || 'en'
     };
 
-    // Add country bias
-    if (options.countryCode) {
-      params.country = options.countryCode;
+    // Add result type filters if specified
+    if (options.result_type) {
+      params.result_type = Array.isArray(options.result_type)
+        ? options.result_type.join('|')
+        : options.result_type;
     }
 
-    // Add proximity bias
-    if (options.proximity) {
-      params.proximity = `${options.proximity.longitude},${options.proximity.latitude}`;
+    // Add location type filters if specified
+    if (options.location_type) {
+      params.location_type = Array.isArray(options.location_type)
+        ? options.location_type.join('|')
+        : options.location_type;
     }
 
-    const encodedLocation = encodeURIComponent(locationName);
-    const response = await axios.get(
-      `${GEOCODING_PROVIDERS.MAPBOX.baseUrl}/${encodedLocation}.json`,
-      { params, timeout: 10000 }
-    );
-
-    return this.parseMapboxResponse(response.data);
-  }
-
-  // Geocode with OpenCage (if API key available)
-  async geocodeWithOpenCage(locationName, options = {}) {
-    if (!GEOCODING_PROVIDERS.OPENCAGE.apiKey) {
-      throw new Error('OpenCage API key not configured');
-    }
-
-    const params = {
-      key: GEOCODING_PROVIDERS.OPENCAGE.apiKey,
-      q: locationName,
-      limit: options.limit || 5,
-      language: options.language || 'en',
-      pretty: 1,
-      no_annotations: 0
-    };
-
-    // Add country bias
-    if (options.countryCode) {
-      params.countrycode = options.countryCode;
-    }
-
-    // Add bounding box
-    if (options.bounds) {
-      params.bounds = `${options.bounds.west},${options.bounds.south},${options.bounds.east},${options.bounds.north}`;
-    }
-
-    const response = await axios.get(GEOCODING_PROVIDERS.OPENCAGE.baseUrl, {
+    const response = await axios.get(GOOGLE_CLOUD_CONFIG.GEOCODING.baseUrl, {
       params,
       timeout: 10000
     });
 
-    return this.parseOpenCageResponse(response.data);
-  }
-
-  // Generic geocoding with provider selection
-  async geocodeWithProvider(locationName, provider, options = {}) {
-    switch (provider) {
-      case 'nominatim':
-        return await this.geocodeWithNominatim(locationName, options);
-      case 'mapbox':
-        return await this.geocodeWithMapbox(locationName, options);
-      case 'opencage':
-        return await this.geocodeWithOpenCage(locationName, options);
-      default:
-        throw new Error(`Unknown geocoding provider: ${provider}`);
-    }
-  }
-
-  // Reverse geocoding with Nominatim
-  async reverseGeocodeWithNominatim(latitude, longitude, options = {}) {
-    await this.respectRateLimit(GEOCODING_PROVIDERS.NOMINATIM.rateLimit);
-
-    const params = {
-      lat: latitude,
-      lon: longitude,
-      format: 'json',
-      addressdetails: 1,
-      zoom: options.zoom || 18,
-      'accept-language': options.language || 'en'
-    };
-
-    const response = await axios.get(`${GEOCODING_PROVIDERS.NOMINATIM.baseUrl}/reverse`, {
-      params,
-      headers: {
-        'User-Agent': 'Quantum-Path-Planning-App/1.0'
-      },
-      timeout: 10000
-    });
-
-    return this.parseNominatimReverseResponse(response.data);
-  }
-
-  // Generic reverse geocoding
-  async reverseGeocodeWithProvider(latitude, longitude, provider, options = {}) {
-    switch (provider) {
-      case 'nominatim':
-        return await this.reverseGeocodeWithNominatim(latitude, longitude, options);
-      // Add other providers as needed
-      default:
-        throw new Error(`Reverse geocoding not implemented for provider: ${provider}`);
-    }
-  }
-
-  // Parse Nominatim response
-  parseNominatimResponse(data) {
-    if (!Array.isArray(data) || data.length === 0) {
-      return [];
+    if (response.data.status !== 'OK') {
+      throw new Error(`Google Reverse Geocoding API error: ${response.data.status} - ${response.data.error_message || 'Unknown error'}`);
     }
 
-    return data.map(item => ({
-      name: item.display_name,
-      latitude: parseFloat(item.lat),
-      longitude: parseFloat(item.lon),
-      confidence: this.calculateNominatimConfidence(item),
-      type: item.type,
-      category: item.class,
-      address: this.parseNominatimAddress(item.address),
-      boundingBox: item.boundingbox ? {
-        north: parseFloat(item.boundingbox[1]),
-        south: parseFloat(item.boundingbox[0]),
-        east: parseFloat(item.boundingbox[3]),
-        west: parseFloat(item.boundingbox[2])
-      } : null,
-      provider: 'nominatim',
-      raw: item
+    return this.parseGoogleReverseGeocodingResults(response.data.results);
+  }
+
+  // Parse Google Geocoding API results
+  parseGoogleGeocodingResults(results) {
+    return results.map(result => ({
+      name: result.formatted_address,
+      latitude: result.geometry.location.lat,
+      longitude: result.geometry.location.lng,
+      confidence: this.calculateGoogleConfidence(result),
+      type: this.getGooglePlaceType(result.types),
+      components: this.parseGoogleAddressComponents(result.address_components),
+      place_id: result.place_id,
+      viewport: result.geometry.viewport,
+      location_type: result.geometry.location_type
     }));
   }
 
-  // Parse Mapbox response
-  parseMapboxResponse(data) {
-    if (!data.features || data.features.length === 0) {
-      return [];
-    }
-
-    return data.features.map(feature => ({
-      name: feature.place_name,
-      latitude: feature.center[1],
-      longitude: feature.center[0],
-      confidence: feature.relevance || 0.5,
-      type: feature.place_type?.[0] || 'unknown',
-      category: feature.properties?.category || 'place',
-      address: this.parseMapboxAddress(feature),
-      boundingBox: feature.bbox ? {
-        west: feature.bbox[0],
-        south: feature.bbox[1],
-        east: feature.bbox[2],
-        north: feature.bbox[3]
-      } : null,
-      provider: 'mapbox',
-      raw: feature
-    }));
-  }
-
-  // Parse OpenCage response
-  parseOpenCageResponse(data) {
-    if (!data.results || data.results.length === 0) {
-      return [];
-    }
-
-    return data.results.map(result => ({
-      name: result.formatted,
-      latitude: result.geometry.lat,
-      longitude: result.geometry.lng,
-      confidence: result.confidence / 10, // Convert to 0-1 scale
-      type: result.components._type || 'unknown',
-      category: result.components._category || 'place',
-      address: this.parseOpenCageAddress(result.components),
-      boundingBox: result.bounds ? {
-        north: result.bounds.northeast.lat,
-        south: result.bounds.southwest.lat,
-        east: result.bounds.northeast.lng,
-        west: result.bounds.southwest.lng
-      } : null,
-      provider: 'opencage',
-      raw: result
-    }));
-  }
-
-  // Parse Nominatim reverse response
-  parseNominatimReverseResponse(data) {
-    if (!data || !data.display_name) {
+  // Parse Google Reverse Geocoding API results
+  parseGoogleReverseGeocodingResults(results) {
+    if (!results || results.length === 0) {
       return null;
     }
 
+    const result = results[0]; // Take the most relevant result
     return {
-      name: data.display_name,
-      address: this.parseNominatimAddress(data.address),
-      provider: 'nominatim',
-      raw: data
+      name: result.formatted_address,
+      latitude: result.geometry.location.lat,
+      longitude: result.geometry.location.lng,
+      components: this.parseGoogleAddressComponents(result.address_components),
+      place_id: result.place_id,
+      types: result.types
     };
   }
 
-  // Helper methods
-  parseNominatimAddress(address) {
-    if (!address) return {};
-    
-    return {
-      houseNumber: address.house_number,
-      street: address.road || address.street,
-      neighborhood: address.neighbourhood || address.suburb,
-      city: address.city || address.town || address.village,
-      county: address.county,
-      state: address.state,
-      country: address.country,
-      postcode: address.postcode
-    };
-  }
-
-  parseMapboxAddress(feature) {
-    const context = feature.context || [];
-    const address = {};
-
-    context.forEach(item => {
-      const id = item.id.split('.')[0];
-      switch (id) {
-        case 'postcode':
-          address.postcode = item.text;
-          break;
-        case 'place':
-          address.city = item.text;
-          break;
-        case 'region':
-          address.state = item.text;
-          break;
-        case 'country':
-          address.country = item.text;
-          break;
-      }
-    });
-
-    return address;
-  }
-
-  parseOpenCageAddress(components) {
-    return {
-      houseNumber: components.house_number,
-      street: components.road || components.street,
-      neighborhood: components.neighbourhood || components.suburb,
-      city: components.city || components.town || components.village,
-      county: components.county,
-      state: components.state,
-      country: components.country,
-      postcode: components.postcode
-    };
-  }
-
-  calculateNominatimConfidence(item) {
+  // Helper methods for Google API results parsing
+  calculateGoogleConfidence(result) {
     let confidence = 0.5; // Base confidence
-    
-    // Increase confidence based on item properties
-    if (item.importance) confidence += item.importance * 0.3;
-    if (item.type === 'city' || item.type === 'town') confidence += 0.2;
-    if (item.class === 'place') confidence += 0.1;
-    
+
+    // Increase confidence based on location type
+    if (result.geometry.location_type === 'ROOFTOP') confidence += 0.4;
+    else if (result.geometry.location_type === 'RANGE_INTERPOLATED') confidence += 0.3;
+    else if (result.geometry.location_type === 'GEOMETRIC_CENTER') confidence += 0.2;
+    else if (result.geometry.location_type === 'APPROXIMATE') confidence += 0.1;
+
+    // Increase confidence based on place types
+    if (result.types.includes('street_address')) confidence += 0.3;
+    else if (result.types.includes('premise')) confidence += 0.25;
+    else if (result.types.includes('subpremise')) confidence += 0.2;
+    else if (result.types.includes('locality')) confidence += 0.15;
+
     return Math.min(confidence, 1.0);
   }
 
-  // Get available providers based on API key configuration
-  getAvailableProviders() {
-    const providers = ['nominatim']; // Always available
-    
-    if (GEOCODING_PROVIDERS.MAPBOX.apiKey) {
-      providers.unshift('mapbox'); // Prefer Mapbox if available
+  getGooglePlaceType(types) {
+    const typeMapping = {
+      'street_address': 'address',
+      'route': 'street',
+      'locality': 'city',
+      'administrative_area_level_1': 'state',
+      'country': 'country',
+      'postal_code': 'postcode',
+      'point_of_interest': 'poi'
+    };
+
+    for (const type of types) {
+      if (typeMapping[type]) {
+        return typeMapping[type];
+      }
     }
-    
-    if (GEOCODING_PROVIDERS.OPENCAGE.apiKey) {
-      providers.push('opencage');
-    }
-    
-    return providers;
+
+    return types[0] || 'unknown';
   }
 
-  // Rate limiting
-  async respectRateLimit(minInterval) {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < minInterval) {
-      const waitTime = minInterval - timeSinceLastRequest;
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastRequestTime = Date.now();
+  parseGoogleAddressComponents(components) {
+    const parsed = {};
+
+    components.forEach(component => {
+      const types = component.types;
+      const value = component.long_name;
+      const shortValue = component.short_name;
+
+      if (types.includes('street_number')) parsed.street_number = value;
+      if (types.includes('route')) parsed.street = value;
+      if (types.includes('locality')) parsed.city = value;
+      if (types.includes('administrative_area_level_1')) {
+        parsed.state = value;
+        parsed.state_code = shortValue;
+      }
+      if (types.includes('country')) {
+        parsed.country = value;
+        parsed.country_code = shortValue;
+      }
+      if (types.includes('postal_code')) parsed.postcode = value;
+    });
+
+    return parsed;
   }
 
-  // Cache management
+  // Cache management methods
   getCacheKey(location, options) {
-    return `geocode_${location}_${JSON.stringify(options)}`;
+    return `${location}_${JSON.stringify(options)}`;
   }
 
   isCached(key) {
     const cached = this.cache.get(key);
-    return cached && (Date.now() - cached.timestamp) < this.cacheTimeout;
+    if (!cached) return false;
+
+    const now = Date.now();
+    if (now - cached.timestamp > this.cacheTimeout) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
   }
 
   getFromCache(key) {
-    return this.cache.get(key)?.data || null;
+    const cached = this.cache.get(key);
+    return cached ? cached.data : null;
   }
 
   setCache(key, data) {
@@ -466,119 +288,103 @@ class GeocodingService {
       data,
       timestamp: Date.now()
     });
+
+    // Clean old cache entries periodically
+    if (this.cache.size > 1000) {
+      this.cleanCache();
+    }
   }
 
-  // Fuzzy matching for cached results
+  cleanCache() {
+    const now = Date.now();
+    for (const [key, value] of this.cache.entries()) {
+      if (now - value.timestamp > this.cacheTimeout) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  // Utility methods
+  isValidCoordinate(latitude, longitude) {
+    return (
+      typeof latitude === 'number' &&
+      typeof longitude === 'number' &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      !isNaN(latitude) &&
+      !isNaN(longitude)
+    );
+  }
+
+  // Fuzzy matching from cache for fallback
   fuzzyMatchFromCache(locationName) {
-    const normalizedInput = locationName.toLowerCase().trim();
-    
-    for (const [key, cached] of this.cache.entries()) {
-      if (key.startsWith('geocode_')) {
-        const cachedLocation = key.split('_')[1].toLowerCase();
-        if (this.calculateSimilarity(normalizedInput, cachedLocation) > 0.8) {
-          return cached.data;
+    const searchTerm = locationName.toLowerCase();
+
+    for (const [key, value] of this.cache.entries()) {
+      if (key.toLowerCase().includes(searchTerm) || searchTerm.includes(key.toLowerCase())) {
+        const now = Date.now();
+        if (now - value.timestamp <= this.cacheTimeout) {
+          return value.data;
         }
       }
     }
-    
+
     return null;
   }
 
-  calculateSimilarity(str1, str2) {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-    
-    if (longer.length === 0) return 1.0;
-    
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
-
-  levenshteinDistance(str1, str2) {
-    const matrix = [];
-    
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-    
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-    
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-    
-    return matrix[str2.length][str1.length];
-  }
-
-  // Validation
-  isValidCoordinate(latitude, longitude) {
-    return !isNaN(latitude) && !isNaN(longitude) &&
-           latitude >= -90 && latitude <= 90 &&
-           longitude >= -180 && longitude <= 180;
-  }
-
-  // Batch geocoding for multiple locations
-  async batchGeocode(locations, options = {}) {
-    const results = [];
-    const batchSize = options.batchSize || 5;
-    const delay = options.delay || 1000;
-
-    for (let i = 0; i < locations.length; i += batchSize) {
-      const batch = locations.slice(i, i + batchSize);
-      const batchPromises = batch.map(location => 
-        this.geocodeLocation(location, options).catch(error => ({
-          error: error.message,
-          location
-        }))
-      );
-
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
-
-      // Add delay between batches to respect rate limits
-      if (i + batchSize < locations.length) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-
-    return results;
-  }
-
-  // Clear cache
-  clearCache() {
-    this.cache.clear();
-  }
-
-  // Get cache statistics
-  getCacheStats() {
-    return {
-      size: this.cache.size,
-      entries: Array.from(this.cache.keys())
+  // Places API search for enhanced results
+  async searchPlaces(query, options = {}) {
+    const params = {
+      query: query,
+      key: GOOGLE_CLOUD_CONFIG.PLACES.apiKey,
+      language: options.language || 'en'
     };
+
+    // Add location bias if specified
+    if (options.location) {
+      params.location = `${options.location.lat},${options.location.lng}`;
+      params.radius = options.radius || 50000; // 50km default radius
+    }
+
+    // Add type filter if specified
+    if (options.type) {
+      params.type = options.type;
+    }
+
+    const response = await axios.get(`${GOOGLE_CLOUD_CONFIG.PLACES.baseUrl}/textsearch/json`, {
+      params,
+      timeout: 10000
+    });
+
+    if (response.data.status !== 'OK') {
+      throw new Error(`Google Places API error: ${response.data.status} - ${response.data.error_message || 'Unknown error'}`);
+    }
+
+    return this.parseGooglePlacesResults(response.data.results);
+  }
+
+  // Parse Google Places API results
+  parseGooglePlacesResults(results) {
+    return results.map(result => ({
+      name: result.name,
+      formatted_address: result.formatted_address,
+      latitude: result.geometry.location.lat,
+      longitude: result.geometry.location.lng,
+      place_id: result.place_id,
+      types: result.types,
+      rating: result.rating,
+      price_level: result.price_level,
+      photos: result.photos ? result.photos.map(photo => ({
+        photo_reference: photo.photo_reference,
+        width: photo.width,
+        height: photo.height
+      })) : []
+    }));
   }
 }
 
-// Create and export singleton instance
+// Create and export a singleton instance
 const geocodingService = new GeocodingService();
 export default geocodingService;
-
-// Export individual functions for convenience
-export const {
-  geocodeLocation,
-  reverseGeocode,
-  batchGeocode,
-  clearCache,
-  getCacheStats
-} = geocodingService;

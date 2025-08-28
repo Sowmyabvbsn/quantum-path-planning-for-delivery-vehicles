@@ -1,24 +1,18 @@
 import axios from 'axios';
-import process from 'process'
-window.process=process
-const OBSTACLE_SERVICES = {
-  WEATHER: {
-    baseUrl: 'https://api.openweathermap.org/data/2.5',
-    apiKey: process.env.REACT_APP_OPENWEATHER_API_KEY || 'demo_key'
+
+// Google Cloud APIs configuration
+const GOOGLE_CLOUD_CONFIG = {
+  MAPS: {
+    baseUrl: 'https://maps.googleapis.com/maps/api',
+    apiKey: 'AIzaSyD4N9C7tE_VFlPUjVaAOdSQZNoGO9OTM7w'
   },
-  
-  TRAFFIC: {
-    baseUrl: 'https://traffic.ls.hereapi.com/traffic/6.3',
-    apiKey: process.env.REACT_APP_HERE_API_KEY || 'demo_key'
+  ROADS: {
+    baseUrl: 'https://roads.googleapis.com/v1',
+    apiKey: 'AIzaSyD4N9C7tE_VFlPUjVaAOdSQZNoGO9OTM7w'
   },
-  
-  MAPBOX: {
-    baseUrl: 'https://api.mapbox.com/traffic/v1',
-    apiKey: process.env.REACT_APP_MAPBOX_API_KEY || 'demo_key'
-  },
-  TOMTOM: {
-    baseUrl: 'https://api.tomtom.com/traffic/services/4',
-    apiKey: process.env.REACT_APP_TOMTOM_API_KEY || 'demo_key'
+  PLACES: {
+    baseUrl: 'https://maps.googleapis.com/maps/api/place',
+    apiKey: 'AIzaSyD4N9C7tE_VFlPUjVaAOdSQZNoGO9OTM7w'
   }
 };
 
@@ -29,282 +23,237 @@ class ObstacleDetectionService {
     this.requestQueue = [];
     this.isProcessing = false;
   }
+  // Main method to get route obstacles using Google Cloud APIs
   async getRouteObstacles(coordinates, options = {}) {
     try {
       const obstacles = await Promise.allSettled([
-        this.getWeatherObstacles(coordinates),
-        this.getTrafficObstacles(coordinates),
-        this.getConstructionObstacles(coordinates),
-        this.getEventObstacles(coordinates)
+        this.getGoogleTrafficObstacles(coordinates),
+        this.getGooglePlacesObstacles(coordinates),
+        this.getGoogleRoadsObstacles(coordinates)
       ]);
 
       const allObstacles = obstacles
         .filter(result => result.status === 'fulfilled')
         .flatMap(result => result.value)
-        .filter(obstacle => obstacle !== null);
+        .filter(obstacle => obstacle && obstacle.severity > 0.3);
 
       // Sort by severity and proximity
       return this.prioritizeObstacles(allObstacles, coordinates);
     } catch (error) {
       console.error('Error fetching route obstacles:', error);
-      return this.getFallbackObstacles(coordinates);
+      return this.getSimulatedObstacles(coordinates);
     }
   }
 
-  async getWeatherObstacles(coordinates) {
+  // Google Maps Traffic API integration
+  async getGoogleTrafficObstacles(coordinates) {
     const obstacles = [];
-    
+
     try {
-      for (const coord of coordinates.slice(0, 5)) { 
-        const cacheKey = `weather_${coord[0]}_${coord[1]}`;
-        
-        if (this.isCached(cacheKey)) {
-          obstacles.push(...this.getFromCache(cacheKey));
-          continue;
-        }
+      // Create path from coordinates for traffic analysis
+      const path = coordinates.map(coord => `${coord[0]},${coord[1]}`).join('|');
 
-        const response = await axios.get(`${OBSTACLE_SERVICES.WEATHER.baseUrl}/weather`, {
-          params: {
-            lat: coord[0],
-            lon: coord[1],
-            appid: OBSTACLE_SERVICES.WEATHER.apiKey,
-            units: 'metric'
-          },
-          timeout: 5000
-        });
-
-        const weatherObstacles = this.parseWeatherData(response.data, coord);
-        this.setCache(cacheKey, weatherObstacles);
-        obstacles.push(...weatherObstacles);
-
-        // Rate limiting - free tier allows 60 calls/minute
-        await this.delay(1100);
-      }
-    } catch (error) {
-      console.warn('Weather API error:', error.message);
-      return this.getSimulatedWeatherObstacles(coordinates);
-    }
-
-    return obstacles;
-  }
-
-  // Traffic obstacles using HERE Traffic API
-  async getTrafficObstacles(coordinates) {
-    const obstacles = [];
-    
-    try {
-      // Create bounding box from coordinates
-      const bounds = this.calculateBounds(coordinates);
-      
-      const response = await axios.get(`${OBSTACLE_SERVICES.TRAFFIC.baseUrl}/incidents.json`, {
+      const response = await axios.get(`${GOOGLE_CLOUD_CONFIG.MAPS.baseUrl}/directions/json`, {
         params: {
-          apikey: OBSTACLE_SERVICES.TRAFFIC.apiKey,
-          bbox: `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`,
-          criticality: 'major,minor',
-          type: 'accident,congestion,roadwork,event'
+          origin: `${coordinates[0][0]},${coordinates[0][1]}`,
+          destination: `${coordinates[coordinates.length - 1][0]},${coordinates[coordinates.length - 1][1]}`,
+          waypoints: coordinates.slice(1, -1).map(coord => `${coord[0]},${coord[1]}`).join('|'),
+          departure_time: 'now',
+          traffic_model: 'best_guess',
+          key: GOOGLE_CLOUD_CONFIG.MAPS.apiKey
         },
-        timeout: 8000
+        timeout: 10000
       });
 
-      if (response.data && response.data.TRAFFIC_ITEMS) {
-        obstacles.push(...this.parseTrafficData(response.data.TRAFFIC_ITEMS.TRAFFIC_ITEM));
+      if (response.data.status === 'OK' && response.data.routes.length > 0) {
+        const route = response.data.routes[0];
+
+        // Analyze legs for traffic conditions
+        route.legs.forEach((leg, index) => {
+          if (leg.duration_in_traffic && leg.duration) {
+            const trafficDelay = leg.duration_in_traffic.value - leg.duration.value;
+
+            if (trafficDelay > 300) { // More than 5 minutes delay
+              obstacles.push({
+                type: 'traffic',
+                severity: Math.min(trafficDelay / 1800, 1.0), // Normalize to 0-1 (30 min max)
+                location: {
+                  latitude: leg.start_location.lat,
+                  longitude: leg.start_location.lng
+                },
+                description: `Heavy traffic causing ${Math.round(trafficDelay / 60)} minute delay`,
+                duration: trafficDelay,
+                source: 'Google Maps Traffic'
+              });
+            }
+          }
+        });
       }
     } catch (error) {
-      console.warn('Traffic API error:', error.message);
+      console.warn('Google Traffic API error:', error.message);
       return this.getSimulatedTrafficObstacles(coordinates);
     }
 
     return obstacles;
   }
 
-  // Construction and road work obstacles
-  async getConstructionObstacles(coordinates) {
-    try {
-      // Use TomTom Traffic API for construction data
-      const bounds = this.calculateBounds(coordinates);
-      
-      const response = await axios.get(`${OBSTACLE_SERVICES.TOMTOM.baseUrl}/incidentDetails`, {
-        params: {
-          key: OBSTACLE_SERVICES.TOMTOM.apiKey,
-          bbox: `${bounds.west},${bounds.south},${bounds.east},${bounds.north}`,
-          fields: 'incidents{type,geometry,properties{iconCategory,magnitudeOfDelay,events{description,code}}}'
-        },
-        timeout: 8000
-      });
-
-      return this.parseConstructionData(response.data);
-    } catch (error) {
-      console.warn('Construction API error:', error.message);
-      return this.getSimulatedConstructionObstacles(coordinates);
-    }
-  }
-
-  // Event-based obstacles (concerts, sports, protests)
-  async getEventObstacles(coordinates) {
-    try {
-      // Use multiple free event APIs
-      const eventObstacles = await Promise.allSettled([
-        this.getTicketmasterEvents(coordinates),
-        this.getEventbriteEvents(coordinates),
-        this.getPredictHQEvents(coordinates)
-      ]);
-
-      return eventObstacles
-        .filter(result => result.status === 'fulfilled')
-        .flatMap(result => result.value);
-    } catch (error) {
-      console.warn('Events API error:', error.message);
-      return this.getSimulatedEventObstacles(coordinates);
-    }
-  }
-
-  // Parse weather data into obstacles
-  parseWeatherData(data, coord) {
+  // Google Places API for event and construction obstacles
+  async getGooglePlacesObstacles(coordinates) {
     const obstacles = [];
-    const weather = data.weather[0];
-    const main = data.main;
-    const wind = data.wind;
 
-    // Heavy rain/snow
-    if (['Rain', 'Snow', 'Thunderstorm'].includes(weather.main)) {
-      obstacles.push({
-        id: `weather_${data.id}_${weather.id}`,
-        type: weather.main === 'Thunderstorm' ? 'Severe Weather' : weather.main,
-        lat: coord[0],
-        lng: coord[1],
-        severity: this.getWeatherSeverity(weather, main),
-        description: `${weather.description} - Visibility and road conditions affected`,
-        duration: this.estimateWeatherDuration(weather.main),
-        source: 'OpenWeatherMap',
-        icon: this.getWeatherIcon(weather.main),
-        timestamp: new Date().toISOString(),
-        metadata: {
-          temperature: main.temp,
-          humidity: main.humidity,
-          windSpeed: wind?.speed || 0,
-          visibility: data.visibility
-        }
-      });
-    }
+    try {
+      // Search for construction, events, and other obstacles near route
+      const center = this.calculateCenter(coordinates);
+      const radius = this.calculateRadius(coordinates);
 
-    // High winds
-    if (wind && wind.speed > 10) { // > 36 km/h
-      obstacles.push({
-        id: `wind_${data.id}`,
-        type: 'High Winds',
-        lat: coord[0],
-        lng: coord[1],
-        severity: wind.speed > 15 ? 'High' : 'Medium',
-        description: `Strong winds ${Math.round(wind.speed * 3.6)} km/h - Caution for high-profile vehicles`,
-        duration: '2-4 hours',
-        source: 'OpenWeatherMap',
-        icon: '💨',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          windSpeed: wind.speed,
-          windDirection: wind.deg
-        }
-      });
-    }
+      const searchTypes = ['construction_site', 'hospital', 'school', 'stadium'];
 
-    // Poor visibility
-    if (data.visibility && data.visibility < 1000) {
-      obstacles.push({
-        id: `visibility_${data.id}`,
-        type: 'Poor Visibility',
-        lat: coord[0],
-        lng: coord[1],
-        severity: data.visibility < 500 ? 'High' : 'Medium',
-        description: `Low visibility ${data.visibility}m - Reduced driving conditions`,
-        duration: '1-3 hours',
-        source: 'OpenWeatherMap',
-        icon: '🌫️',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          visibility: data.visibility
+      for (const type of searchTypes) {
+        const response = await axios.get(`${GOOGLE_CLOUD_CONFIG.PLACES.baseUrl}/nearbysearch/json`, {
+          params: {
+            location: `${center.lat},${center.lng}`,
+            radius: Math.min(radius, 50000), // Max 50km radius
+            type: type,
+            key: GOOGLE_CLOUD_CONFIG.PLACES.apiKey
+          },
+          timeout: 10000
+        });
+
+        if (response.data.status === 'OK') {
+          response.data.results.forEach(place => {
+            let severity = 0.4; // Base severity
+            let description = `${type.replace('_', ' ')} nearby`;
+
+            // Adjust severity based on place type
+            if (type === 'construction_site') {
+              severity = 0.8;
+              description = 'Construction work may cause delays';
+            } else if (type === 'stadium') {
+              severity = 0.6;
+              description = 'Stadium events may cause traffic';
+            } else if (type === 'school') {
+              severity = 0.5;
+              description = 'School zone - reduced speed limits';
+            } else if (type === 'hospital') {
+              severity = 0.3;
+              description = 'Hospital zone - emergency vehicles';
+            }
+
+            obstacles.push({
+              type: type,
+              severity: severity,
+              location: {
+                latitude: place.geometry.location.lat,
+                longitude: place.geometry.location.lng
+              },
+              description: description,
+              name: place.name,
+              rating: place.rating,
+              source: 'Google Places'
+            });
+          });
         }
-      });
+
+        // Rate limiting
+        await this.delay(100);
+      }
+    } catch (error) {
+      console.warn('Google Places API error:', error.message);
+      return this.getSimulatedPlacesObstacles(coordinates);
     }
 
     return obstacles;
   }
 
-  // Parse traffic incident data
-  parseTrafficData(trafficItems) {
-    if (!Array.isArray(trafficItems)) {
-      trafficItems = [trafficItems];
-    }
+  // Google Roads API for road conditions and speed limits
+  async getGoogleRoadsObstacles(coordinates) {
+    const obstacles = [];
 
-    return trafficItems.map(item => ({
-      id: `traffic_${item.TRAFFIC_ITEM_ID}`,
-      type: this.mapTrafficType(item.TRAFFIC_ITEM_TYPE_DESC),
-      lat: parseFloat(item.LOCATION.GEOLOC.ORIGIN.LATITUDE),
-      lng: parseFloat(item.LOCATION.GEOLOC.ORIGIN.LONGITUDE),
-      severity: this.mapTrafficSeverity(item.CRITICALITY),
-      description: item.TRAFFIC_ITEM_DESCRIPTION[0].content,
-      duration: this.estimateTrafficDuration(item),
-      source: 'HERE Traffic',
-      icon: this.getTrafficIcon(item.TRAFFIC_ITEM_TYPE_DESC),
-      timestamp: new Date().toISOString(),
-      metadata: {
-        roadName: item.LOCATION.DEFINED.ORIGIN.ROADWAY.DESCRIPTION[0].content,
-        direction: item.LOCATION.DEFINED.ORIGIN.ROADWAY.DIRECTION,
-        length: item.LENGTH
-      }
-    }));
-  }
-
-  // Get Ticketmaster events (free tier: 5000 API calls/day)
-  async getTicketmasterEvents(coordinates) {
     try {
-      const center = this.calculateCenter(coordinates);
-      const response = await axios.get('https://app.ticketmaster.com/discovery/v2/events.json', {
+      // Snap coordinates to roads and get road information
+      const path = coordinates.map(coord => `${coord[0]},${coord[1]}`).join('|');
+
+      const response = await axios.get(`${GOOGLE_CLOUD_CONFIG.ROADS.baseUrl}/snapToRoads`, {
         params: {
-          apikey: process.env.REACT_APP_TICKETMASTER_API_KEY || 'demo_key',
-          latlong: `${center.lat},${center.lng}`,
-          radius: '25',
-          unit: 'km',
-          size: 10,
-          startDateTime: new Date().toISOString(),
-          endDateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          path: path,
+          interpolate: true,
+          key: GOOGLE_CLOUD_CONFIG.ROADS.apiKey
         },
-        timeout: 5000
+        timeout: 10000
       });
 
-      return this.parseTicketmasterEvents(response.data);
+      if (response.data.snappedPoints) {
+        // Get speed limits for snapped points
+        const placeIds = response.data.snappedPoints
+          .filter(point => point.placeId)
+          .map(point => point.placeId)
+          .slice(0, 100); // Limit to 100 requests
+
+        if (placeIds.length > 0) {
+          const speedResponse = await axios.get(`${GOOGLE_CLOUD_CONFIG.ROADS.baseUrl}/speedLimits`, {
+            params: {
+              placeIds: placeIds.join(','),
+              key: GOOGLE_CLOUD_CONFIG.ROADS.apiKey
+            },
+            timeout: 10000
+          });
+
+          if (speedResponse.data.speedLimits) {
+            speedResponse.data.speedLimits.forEach((speedLimit, index) => {
+              const snappedPoint = response.data.snappedPoints[index];
+
+              // Create obstacles for low speed limit areas
+              if (speedLimit.speedLimit && speedLimit.speedLimit <= 30) {
+                obstacles.push({
+                  type: 'speed_limit',
+                  severity: 0.4,
+                  location: {
+                    latitude: snappedPoint.location.latitude,
+                    longitude: snappedPoint.location.longitude
+                  },
+                  description: `Speed limit: ${speedLimit.speedLimit} ${speedLimit.units}`,
+                  speedLimit: speedLimit.speedLimit,
+                  units: speedLimit.units,
+                  source: 'Google Roads'
+                });
+              }
+            });
+          }
+        }
+      }
     } catch (error) {
-      console.warn('Ticketmaster API error:', error.message);
-      return [];
+      console.warn('Google Roads API error:', error.message);
+      return this.getSimulatedRoadObstacles(coordinates);
     }
+
+    return obstacles;
   }
 
-  // Simulate realistic obstacles when APIs are unavailable
+  // Simulation methods for fallback when APIs fail
+  getSimulatedObstacles(coordinates) {
+    return [
+      ...this.getSimulatedTrafficObstacles(coordinates),
+      ...this.getSimulatedPlacesObstacles(coordinates),
+      ...this.getSimulatedRoadObstacles(coordinates)
+    ];
+  }
+
   getSimulatedTrafficObstacles(coordinates) {
     const obstacles = [];
-    const trafficTypes = [
-      { type: 'Heavy Traffic', severity: 'Medium', icon: '🚦', description: 'Congestion reported on main routes' },
-      { type: 'Accident', severity: 'High', icon: '🚗💥', description: 'Multi-vehicle collision blocking lanes' },
-      { type: 'Road Work', severity: 'Medium', icon: '🚧', description: 'Construction causing lane closures' }
-    ];
 
+    // Add some random traffic obstacles
     coordinates.forEach((coord, index) => {
-      if (Math.random() > 0.7) { // 30% chance of obstacle
-        const obstacleType = trafficTypes[Math.floor(Math.random() * trafficTypes.length)];
+      if (Math.random() > 0.7) { // 30% chance of traffic
         obstacles.push({
-          id: `sim_traffic_${index}_${Date.now()}`,
-          type: obstacleType.type,
-          lat: coord[0] + (Math.random() - 0.5) * 0.01,
-          lng: coord[1] + (Math.random() - 0.5) * 0.01,
-          severity: obstacleType.severity,
-          description: obstacleType.description,
-          duration: '30-60 minutes',
-          source: 'Simulated Data',
-          icon: obstacleType.icon,
-          timestamp: new Date().toISOString(),
-          metadata: {
-            confidence: 0.8,
-            simulated: true
-          }
+          type: 'traffic',
+          severity: 0.3 + Math.random() * 0.4, // 0.3 to 0.7
+          location: {
+            latitude: coord[0] + (Math.random() - 0.5) * 0.01,
+            longitude: coord[1] + (Math.random() - 0.5) * 0.01
+          },
+          description: 'Simulated traffic congestion',
+          duration: 300 + Math.random() * 1200, // 5-25 minutes
+          source: 'Simulation'
         });
       }
     });
@@ -312,145 +261,128 @@ class ObstacleDetectionService {
     return obstacles;
   }
 
-  getSimulatedWeatherObstacles(coordinates) {
+  getSimulatedPlacesObstacles(coordinates) {
     const obstacles = [];
-    const weatherTypes = [
-      { type: 'Rain', severity: 'Medium', icon: '🌧️', description: 'Moderate rainfall affecting visibility' },
-      { type: 'Fog', severity: 'High', icon: '🌫️', description: 'Dense fog reducing visibility to 200m' },
-      { type: 'High Winds', severity: 'Medium', icon: '💨', description: 'Strong crosswinds affecting vehicle stability' }
-    ];
+    const center = this.calculateCenter(coordinates);
 
-    if (Math.random() > 0.6) { // 40% chance of weather obstacle
-      const center = this.calculateCenter(coordinates);
-      const weatherType = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
-      
-      obstacles.push({
-        id: `sim_weather_${Date.now()}`,
-        type: weatherType.type,
-        lat: center.lat + (Math.random() - 0.5) * 0.02,
-        lng: center.lng + (Math.random() - 0.5) * 0.02,
-        severity: weatherType.severity,
-        description: weatherType.description,
-        duration: '2-4 hours',
-        source: 'Simulated Weather',
-        icon: weatherType.icon,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          confidence: 0.7,
-          simulated: true
-        }
-      });
-    }
+    // Add some simulated places obstacles
+    const placeTypes = ['school', 'hospital', 'construction_site'];
+    placeTypes.forEach(type => {
+      if (Math.random() > 0.8) { // 20% chance
+        obstacles.push({
+          type: type,
+          severity: type === 'construction_site' ? 0.8 : 0.4,
+          location: {
+            latitude: center.lat + (Math.random() - 0.5) * 0.02,
+            longitude: center.lng + (Math.random() - 0.5) * 0.02
+          },
+          description: `Simulated ${type.replace('_', ' ')}`,
+          source: 'Simulation'
+        });
+      }
+    });
+
+    return obstacles;
+  }
+
+  getSimulatedRoadObstacles(coordinates) {
+    const obstacles = [];
+
+    // Add some speed limit obstacles
+    coordinates.forEach((coord, index) => {
+      if (Math.random() > 0.9) { // 10% chance
+        obstacles.push({
+          type: 'speed_limit',
+          severity: 0.3,
+          location: {
+            latitude: coord[0],
+            longitude: coord[1]
+          },
+          description: 'Simulated low speed zone',
+          speedLimit: 25 + Math.random() * 15, // 25-40 km/h
+          source: 'Simulation'
+        });
+      }
+    });
 
     return obstacles;
   }
 
   // Utility methods
-  calculateBounds(coordinates) {
-    const lats = coordinates.map(c => c[0]);
-    const lngs = coordinates.map(c => c[1]);
-    
-    return {
-      north: Math.max(...lats) + 0.01,
-      south: Math.min(...lats) - 0.01,
-      east: Math.max(...lngs) + 0.01,
-      west: Math.min(...lngs) - 0.01
-    };
-  }
-
   calculateCenter(coordinates) {
-    const avgLat = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
-    const avgLng = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
-    return { lat: avgLat, lng: avgLng };
-  }
+    const lats = coordinates.map(coord => coord[0]);
+    const lngs = coordinates.map(coord => coord[1]);
 
-  getWeatherSeverity(weather, main) {
-    if (weather.main === 'Thunderstorm') return 'High';
-    if (weather.main === 'Snow' && main.temp < -5) return 'High';
-    if (weather.main === 'Rain' && weather.id < 520) return 'High'; // Heavy rain
-    return 'Medium';
-  }
-
-  mapTrafficSeverity(criticality) {
-    switch (criticality) {
-      case 0: return 'Low';
-      case 1: return 'Medium';
-      case 2: return 'High';
-      default: return 'Medium';
-    }
-  }
-
-  getWeatherIcon(weatherType) {
-    const icons = {
-      'Rain': '🌧️',
-      'Snow': '❄️',
-      'Thunderstorm': '⛈️',
-      'Fog': '🌫️',
-      'Mist': '🌫️'
+    return {
+      lat: lats.reduce((sum, lat) => sum + lat, 0) / lats.length,
+      lng: lngs.reduce((sum, lng) => sum + lng, 0) / lngs.length
     };
-    return icons[weatherType] || '🌤️';
   }
 
-  getTrafficIcon(trafficType) {
-    const icons = {
-      'CONSTRUCTION': '🚧',
-      'ACCIDENT': '🚗💥',
-      'CONGESTION': '🚦',
-      'ROAD_CLOSURE': '🚫',
-      'EVENT': '🎪'
-    };
-    return icons[trafficType] || '⚠️';
-  }
+  calculateRadius(coordinates) {
+    const center = this.calculateCenter(coordinates);
+    let maxDistance = 0;
 
-  prioritizeObstacles(obstacles, coordinates) {
-    return obstacles
-      .map(obstacle => ({
-        ...obstacle,
-        priority: this.calculatePriority(obstacle, coordinates)
-      }))
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, 20); // Limit to top 20 obstacles
-  }
+    coordinates.forEach(coord => {
+      const distance = this.calculateDistance(center.lat, center.lng, coord[0], coord[1]);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+      }
+    });
 
-  calculatePriority(obstacle, coordinates) {
-    let priority = 0;
-    
-    // Severity weight
-    const severityWeights = { 'High': 3, 'Medium': 2, 'Low': 1 };
-    priority += severityWeights[obstacle.severity] || 1;
-    
-    // Proximity to route
-    const minDistance = Math.min(...coordinates.map(coord => 
-      this.calculateDistance(coord[0], coord[1], obstacle.lat, obstacle.lng)
-    ));
-    priority += Math.max(0, 2 - minDistance); // Higher priority for closer obstacles
-    
-    // Recency
-    const age = Date.now() - new Date(obstacle.timestamp).getTime();
-    priority += Math.max(0, 1 - age / (60 * 60 * 1000)); // Fresher data gets higher priority
-    
-    return priority;
+    return Math.max(maxDistance * 1000, 5000); // At least 5km radius
   }
 
   calculateDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371;
+    const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const a =
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng/2) * Math.sin(dLng/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
   }
 
-  // Cache management
+  prioritizeObstacles(obstacles, coordinates) {
+    const center = this.calculateCenter(coordinates);
+
+    return obstacles
+      .map(obstacle => ({
+        ...obstacle,
+        distance: this.calculateDistance(
+          center.lat, center.lng,
+          obstacle.location.latitude, obstacle.location.longitude
+        )
+      }))
+      .sort((a, b) => {
+        // Sort by severity first, then by distance
+        if (a.severity !== b.severity) {
+          return b.severity - a.severity;
+        }
+        return a.distance - b.distance;
+      })
+      .slice(0, 20); // Limit to top 20 obstacles
+  }
+
+  // Cache management methods
   isCached(key) {
     const cached = this.cache.get(key);
-    return cached && (Date.now() - cached.timestamp) < this.cacheTimeout;
+    if (!cached) return false;
+
+    const now = Date.now();
+    if (now - cached.timestamp > this.cacheTimeout) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
   }
 
   getFromCache(key) {
-    return this.cache.get(key)?.data || [];
+    const cached = this.cache.get(key);
+    return cached ? cached.data : null;
   }
 
   setCache(key, data) {
@@ -460,17 +392,12 @@ class ObstacleDetectionService {
     });
   }
 
+  // Utility delay method
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
-
-  // Fallback obstacles for demo purposes
-  getFallbackObstacles(coordinates) {
-    return [
-      ...this.getSimulatedTrafficObstacles(coordinates),
-      ...this.getSimulatedWeatherObstacles(coordinates)
-    ];
-  }
 }
 
-export default new ObstacleDetectionService();
+// Create and export a singleton instance
+const obstacleService = new ObstacleDetectionService();
+export default obstacleService;
